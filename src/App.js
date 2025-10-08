@@ -206,8 +206,7 @@ function App() {
                         return false;
                       };
                       const entries = entriesRaw
-                        .filter(([k, v]) => !excluded.has(k) && !isEmpty(v))
-                        .sort(([a], [b]) => a.localeCompare(b));
+                        .filter(([k, v]) => !excluded.has(k) && !isEmpty(v));
                       const json = JSON.stringify(row, null, 2);
                       return (
                         <div key={c.collection + '-' + idx} className="doc-card">
