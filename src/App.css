@@ -76,6 +76,12 @@ body {
 }
 
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
+.cards-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.doc-card { background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.00)); border: 1px solid var(--border); border-radius: 14px; padding: 14px; box-shadow: 0 6px 18px rgba(0,0,0,0.25); }
+.doc-title { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-weight: 700; margin-bottom: 8px; }
+.kv { display: grid; grid-template-columns: 160px 1fr; gap: 8px; align-items: start; }
+.kv .k { color: var(--muted); }
+.kv .v { color: var(--text); word-break: break-word; }
 
 .statbar { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin: 16px 0 20px; }
 .stat { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
@@ -102,3 +108,16 @@ body {
 
 .fade-in { animation: fade-in .25s ease both; }
 @keyframes fade-in { from { opacity: 0; transform: translateY(6px);} to { opacity: 1; transform: none;} }
+
+/* Table view */
+.toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.segmented { display: inline-flex; background: var(--bg-alt); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.segmented button { background: transparent; color: var(--text); border: 0; padding: 8px 12px; cursor: pointer; }
+.segmented .active { background: linear-gradient(180deg, var(--electric), var(--electric-700)); box-shadow: var(--shadow); }
+
+.table-wrap { overflow: auto; border: 1px solid var(--border); border-radius: 12px; }
+table { width: 100%; border-collapse: collapse; }
+thead th { position: sticky; top: 0; background: #0f1524; color: var(--text); text-align: left; font-weight: 700; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+tbody td { padding: 10px 12px; border-bottom: 1px solid var(--border); color: var(--text); }
+tbody tr:hover { background: rgba(0,176,255,0.06); }
+tbody tr:nth-child(even) { background: rgba(255,255,255,0.02); }
