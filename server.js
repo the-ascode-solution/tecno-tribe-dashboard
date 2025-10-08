@@ -1,56 +1,87 @@
 const express = require('express');
 const cors = require('cors');
-const { MongoClient } = require('mongodb');
+const { Pool } = require('pg');
 require('dotenv').config();
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-const PORT = process.env.PORT || 5000;
-const MONGODB_URI = process.env.MONGODB_URI || "";
-const MONGODB_DB = process.env.MONGODB_DB;
+const PORT = process.env.SERVER_PORT || 5000;
+const DATABASE_URL = process.env.DATABASE_URL || "";
 
-let mongoClient;
-let mongoDb;
+console.log('Environment check:');
+console.log('PORT:', PORT);
+console.log('DATABASE_URL:', DATABASE_URL ? 'Set' : 'Not set');
 
-async function connectMongo() {
-  if (mongoDb) return mongoDb;
-  if (!MONGODB_URI) {
-    throw new Error('Missing MONGODB_URI');
+let pool;
+
+async function connectPostgres() {
+  if (pool) return pool;
+  if (!DATABASE_URL) {
+    throw new Error('Missing DATABASE_URL');
   }
-  mongoClient = new MongoClient(MONGODB_URI, { ignoreUndefined: true });
-  await mongoClient.connect();
-  // If no db specified in URI, allow override with MONGODB_DB, otherwise default 'admin'
-  const dbNameFromUri = new URL(MONGODB_URI).pathname.replace(/^\//, '');
-  const dbName = dbNameFromUri || MONGODB_DB || 'admin';
-  mongoDb = mongoClient.db(dbName);
-  return mongoDb;
+  pool = new Pool({
+    connectionString: DATABASE_URL,
+    ssl: {
+      rejectUnauthorized: false
+    }
+  });
+  return pool;
 }
 
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true });
 });
 
-// Lists collections and returns first 5 docs from each
+// Lists tables and returns first 5 rows from each
 app.get('/api/data', async (_req, res) => {
   try {
-    if (!MONGODB_URI) {
+    if (!DATABASE_URL) {
       return res.json({ 
         collections: [],
-        message: "MongoDB not configured. Please set MONGODB_URI environment variable.",
+        message: "PostgreSQL not configured. Please set DATABASE_URL environment variable.",
         status: "no-db"
       });
     }
     
-    const db = await connectMongo();
-    const collections = await db.listCollections().toArray();
+    const client = await connectPostgres();
+    const client_pool = await client.connect();
+    
+    // Get all tables
+    const tablesQuery = `
+      SELECT table_name 
+      FROM information_schema.tables 
+      WHERE table_schema = 'public' 
+      AND table_type = 'BASE TABLE'
+      ORDER BY table_name;
+    `;
+    
+    const tablesResult = await client_pool.query(tablesQuery);
+    const tables = tablesResult.rows;
+    
     const result = [];
-    for (const col of collections) {
-      const c = db.collection(col.name);
-      const docs = await c.find({}).limit(5).toArray();
-      result.push({ collection: col.name, count: docs.length, docs });
+    for (const table of tables) {
+      const tableName = table.table_name;
+      
+      // Get row count
+      const countQuery = `SELECT COUNT(*) as count FROM "${tableName}";`;
+      const countResult = await client_pool.query(countQuery);
+      const count = parseInt(countResult.rows[0].count);
+      
+      // Get first 5 rows
+      const dataQuery = `SELECT * FROM "${tableName}" LIMIT 5;`;
+      const dataResult = await client_pool.query(dataQuery);
+      const docs = dataResult.rows;
+      
+      result.push({ 
+        collection: tableName, 
+        count: count, 
+        docs: docs 
+      });
     }
+    
+    client_pool.release();
     res.json({ collections: result, status: "connected" });
   } catch (err) {
     console.error('Database error:', err.message);
@@ -63,7 +94,7 @@ app.get('/api/data', async (_req, res) => {
 });
 
 process.on('SIGINT', async () => {
-  if (mongoClient) await mongoClient.close();
+  if (pool) await pool.end();
   process.exit(0);
 });
 

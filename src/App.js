@@ -86,11 +86,11 @@ function App() {
   }
 
   function getFilteredColumns(docs) {
-    const excluded = new Set(['_id','__v','createdAt','updatedAt','submittedAt','timestamps','metadata','ip','ipAddress','userAgent']);
+    const excluded = new Set(['_id','__v','createdAt','updatedAt','submittedAt','timestamps','metadata','ip','ipAddress','userAgent','id','submitted_at']);
     const seen = new Set();
     const ordered = [];
     for (const d of docs) {
-      for (const k of Object.keys(d || {})) {
+      for (const k of Object.keys(d.data || {})) {
         if (excluded.has(k)) continue;
         if (!seen.has(k)) {
           seen.add(k);
@@ -131,11 +131,11 @@ function App() {
           <form onSubmit={handleLogin}>
             <div className="field">
               <label>Email</label>
-              <input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="admin@tecnotribe.site" required />
+              <input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="enter your email" required />
             </div>
             <div className="field">
               <label>Password</label>
-              <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="!password$123*" required />
+              <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="enter password" required />
             </div>
             {error && <div className="error">{error}</div>}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
@@ -214,17 +214,11 @@ function App() {
                   </div>
                   <div className="cards-grid">
                     {docs.map((row, idx) => {
-                      const entriesRaw = Object.entries(row || {});
-                      const excluded = new Set(['_id','__v','createdAt','updatedAt','timestamps','metadata','ipAddress','userAgent']);
-                      const isEmpty = (val) => {
-                        if (val === null || val === undefined) return true;
-                        if (typeof val === 'string') return val.trim() === '';
-                        if (Array.isArray(val)) return val.length === 0;
-                        if (typeof val === 'object') return Object.keys(val).length === 0;
-                        return false;
-                      };
+                      const entriesRaw = Object.entries(row.data || {});
+                      const excluded = new Set(['_id','__v','createdAt','updatedAt','timestamps','metadata','ipAddress','userAgent','id','submitted_at']);
+                      // Show all fields including null/empty ones
                       const entries = entriesRaw
-                        .filter(([k, v]) => !excluded.has(k) && !isEmpty(v));
+                        .filter(([k, v]) => !excluded.has(k));
                       const json = JSON.stringify(row, null, 2);
                       return (
                         <div key={c.collection + '-' + idx} className="doc-card">
@@ -239,7 +233,48 @@ function App() {
                           </div>
                           <div className="kv">
                             {entries.map(([k, v], i) => {
-                              const value = typeof v === 'object' ? JSON.stringify(v) : String(v ?? '');
+                              let value = '';
+                              if (v === null || v === undefined) {
+                                value = '-';
+                              } else if (typeof v === 'string' && v.trim() === '') {
+                                value = '(empty)';
+                              } else if (typeof v === 'object') {
+                                if (Array.isArray(v)) {
+                                  if (v.length === 0) {
+                                    value = '[]';
+                                  } else if (v.length === 1) {
+                                    value = String(v[0]);
+                                  } else {
+                                    value = v.join(', ');
+                                  }
+                                } else {
+                                  // Handle object fields - check if it's a ranking object
+                                  const objKeys = Object.keys(v);
+                                  if (objKeys.length > 0) {
+                                    // Check if this looks like a ranking object (has numeric values)
+                                    const isRanking = objKeys.some(key => !isNaN(v[key]));
+                                    if (isRanking) {
+                                      // Sort by rank (ascending order)
+                                      const sortedEntries = Object.entries(v)
+                                        .sort(([,a], [,b]) => {
+                                          const numA = parseFloat(a);
+                                          const numB = parseFloat(b);
+                                          if (isNaN(numA) && isNaN(numB)) return 0;
+                                          if (isNaN(numA)) return 1;
+                                          if (isNaN(numB)) return -1;
+                                          return numA - numB;
+                                        });
+                                      value = sortedEntries.map(([key, val]) => `${key}: ${val}`).join(', ');
+                                    } else {
+                                      value = objKeys.map(key => `${key}: ${v[key]}`).join(', ');
+                                    }
+                                  } else {
+                                    value = '{}';
+                                  }
+                                }
+                              } else {
+                                value = String(v);
+                              }
                               return (
                                 <div key={k + '-' + i} style={{ contents: 'unset' }}>
                                   <div className="k">{k}</div>
@@ -282,18 +317,72 @@ function App() {
                     <table>
                       <thead>
                         <tr>
-                          {columns.map((col) => (
-                            <th key={col}>{col}</th>
-                          ))}
+                          {columns.map((col) => {
+                            // Format column names to be more readable
+                            const formattedCol = col
+                              .replace(/([A-Z])/g, ' $1') // Add space before capital letters
+                              .replace(/^./, str => str.toUpperCase()) // Capitalize first letter
+                              .replace(/_/g, ' ') // Replace underscores with spaces
+                              .replace(/\b\w/g, l => l.toUpperCase()) // Capitalize each word
+                              .trim();
+                            return <th key={col}>{formattedCol}</th>;
+                          })}
                         </tr>
                       </thead>
                       <tbody>
                         {docs.map((row, idx) => (
                           <tr key={idx}>
                             {columns.map((col) => {
-                              const val = row[col];
-                              const out = typeof val === 'object' ? JSON.stringify(val) : String(val ?? '');
-                              return <td key={col + idx}>{out}</td>;
+                              const val = row.data[col];
+                              let out = '';
+                              
+                              if (val === null || val === undefined) {
+                                out = '-';
+                              } else if (typeof val === 'string' && val.trim() === '') {
+                                out = '(empty)';
+                              } else if (typeof val === 'object') {
+                                if (Array.isArray(val)) {
+                                  if (val.length === 0) {
+                                    out = '[]';
+                                  } else if (val.length === 1) {
+                                    out = String(val[0]);
+                                  } else {
+                                    out = val.join(', ');
+                                  }
+                                } else {
+                                  // Handle object fields - check if it's a ranking object
+                                  const objKeys = Object.keys(val);
+                                  if (objKeys.length > 0) {
+                                    // Check if this looks like a ranking object (has numeric values)
+                                    const isRanking = objKeys.some(key => !isNaN(val[key]));
+                                    if (isRanking) {
+                                      // Sort by rank (ascending order)
+                                      const sortedEntries = Object.entries(val)
+                                        .sort(([,a], [,b]) => {
+                                          const numA = parseFloat(a);
+                                          const numB = parseFloat(b);
+                                          if (isNaN(numA) && isNaN(numB)) return 0;
+                                          if (isNaN(numA)) return 1;
+                                          if (isNaN(numB)) return -1;
+                                          return numA - numB;
+                                        });
+                                      out = sortedEntries.map(([key, value]) => `${key}: ${value}`).join(', ');
+                                    } else {
+                                      out = objKeys.map(key => `${key}: ${val[key]}`).join(', ');
+                                    }
+                                  } else {
+                                    out = '{}';
+                                  }
+                                }
+                              } else if (typeof val === 'boolean') {
+                                out = val ? 'Yes' : 'No';
+                              } else if (typeof val === 'string' && val.length > 50) {
+                                out = val.substring(0, 47) + '...';
+                              } else {
+                                out = String(val);
+                              }
+                              
+                              return <td key={col + idx} title={typeof val === 'object' ? JSON.stringify(val, null, 2) : String(val)}>{out}</td>;
                             })}
                           </tr>
                         ))}
