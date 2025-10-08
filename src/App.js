@@ -25,8 +25,16 @@ function App() {
   useEffect(() => {
     if (!isAuthed) return;
     setLoading(true);
+    setError('');
     fetchDashboardData()
-      .then((json) => setData(json))
+      .then((json) => {
+        setData(json);
+        if (json.status === 'no-db') {
+          setError('MongoDB not configured. Please set up your database connection.');
+        } else if (json.status === 'error') {
+          setError(json.error || 'Database connection failed.');
+        }
+      })
       .catch((e) => setError(e.message || 'Failed to load'))
       .finally(() => setLoading(false));
   }, [isAuthed]);
@@ -172,7 +180,17 @@ function App() {
           </div>
           <div className="stat">
             <div className="label">Status</div>
-            <div className="value" style={{ color: loading ? '#ffda6c' : '#1ad1a5' }}>{loading ? 'Loading…' : 'Connected'}</div>
+            <div className="value" style={{ 
+              color: loading ? '#ffda6c' : 
+                     data?.status === 'connected' ? '#1ad1a5' :
+                     data?.status === 'no-db' ? '#ff6b6b' :
+                     data?.status === 'error' ? '#ff6b6b' : '#ffda6c'
+            }}>
+              {loading ? 'Loading…' : 
+               data?.status === 'connected' ? 'Connected' :
+               data?.status === 'no-db' ? 'No DB Config' :
+               data?.status === 'error' ? 'Error' : 'Unknown'}
+            </div>
           </div>
         </div>
 

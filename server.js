@@ -35,6 +35,14 @@ app.get('/api/health', (_req, res) => {
 // Lists collections and returns first 5 docs from each
 app.get('/api/data', async (_req, res) => {
   try {
+    if (!MONGODB_URI) {
+      return res.json({ 
+        collections: [],
+        message: "MongoDB not configured. Please set MONGODB_URI environment variable.",
+        status: "no-db"
+      });
+    }
+    
     const db = await connectMongo();
     const collections = await db.listCollections().toArray();
     const result = [];
@@ -43,9 +51,14 @@ app.get('/api/data', async (_req, res) => {
       const docs = await c.find({}).limit(5).toArray();
       result.push({ collection: col.name, count: docs.length, docs });
     }
-    res.json({ collections: result });
+    res.json({ collections: result, status: "connected" });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('Database error:', err.message);
+    res.json({ 
+      collections: [],
+      error: err.message,
+      status: "error"
+    });
   }
 });
 
