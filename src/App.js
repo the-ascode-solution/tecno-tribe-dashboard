@@ -209,7 +209,6 @@ function App() {
                         .filter(([k, v]) => !excluded.has(k) && !isEmpty(v))
                         .sort(([a], [b]) => a.localeCompare(b));
                       const json = JSON.stringify(row, null, 2);
-                      const shortId = typeof row._id === 'object' ? (row._id?.$oid || '') : String(row._id || '');
                       return (
                         <div key={c.collection + '-' + idx} className="doc-card">
                           <div className="doc-title">
