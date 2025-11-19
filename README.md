@@ -68,3 +68,33 @@ This section has moved here: [https://facebook.github.io/create-react-app/docs/d
 ### `npm run build` fails to minify
 
 This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+
+## Codemap: Authentication (Login) Flow
+
+```mermaid
+flowchart TD
+    A[User opens App] --> B{sessionStorage.isAuthed === 'true'?}
+    B -- yes --> C[isAuthed state set true]
+    B -- no --> D[Render login form]
+    D --> E[handleLogin submits]
+    E --> F{Email & password match ADMIN_* constants?}
+    F -- yes --> G[setIsAuthed(true) + sessionStorage flag]
+    G --> H[useEffect triggers fetchDashboardData]
+    F -- no --> I[setError('Invalid credentials')]
+    H --> J[/api/data backend]
+    J --> K[Collections + status returned]
+    K --> L[Dashboard rendered]
+    L --> M[handleLogout clears state & sessionStorage]
+    M --> D
+```
+
+**Key pieces**
+
+1. **Constants & state** – `ADMIN_EMAIL`, `ADMIN_PASSWORD`, and controlled inputs (`email`, `password`) live in `src/App.js`.
+2. **Session bootstrap** – On mount, `useEffect` hydrates `isAuthed` from `sessionStorage` to skip repeat logins.
+3. **Login handler** – `handleLogin` compares credentials, toggles `isAuthed`, persists the flag, or surfaces errors.
+4. **Data gating** – Once `isAuthed` is true, the data-fetch effect runs `fetchDashboardData` (`src/api.js`), which first hits `/api/data` via CRA proxy, then falls back to `http://localhost:5000/api/data`.
+5. **Backend** – `server.js` serves `/api/data`, connecting to Postgres (if `DATABASE_URL` is provided) and returning table previews along with status metadata consumed by the UI.
+6. **Logout loop** – `handleLogout` resets credentials, clears `sessionStorage`, and routes users back to the login form, closing the loop shown above.
+
+Use this codemap as the source of truth whenever modifying auth logic or extending it with server-side validation.

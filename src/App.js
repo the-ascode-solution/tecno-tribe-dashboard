@@ -5,6 +5,33 @@ import { fetchDashboardData } from './api';
 const ADMIN_EMAIL = 'admin@tecnotribe.site';
 const ADMIN_PASSWORD = '!password$123*';
 
+const HIDDEN_FIELDS = [
+  'Ambassador',
+  'Ambassador Benefits',
+  'Interested in Ambassdor',
+  'Interested in Ambassador',
+  'ambassador strengths',
+  'ambassador strengths other',
+  'ambassador benfits',
+  'ambassador benefits other',
+  'name',
+  'social media link',
+  'follower count',
+  'suggestions',
+];
+
+const HIDDEN_FIELD_SET = new Set(HIDDEN_FIELDS.map(normalizeFieldName));
+
+function normalizeFieldName(value) {
+  return (value ?? '')
+    .toString()
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ') // collapse whitespace
+    .trim();
+}
+
 function App() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -85,13 +112,23 @@ function App() {
     return 0;
   }
 
+  function getRowFields(doc) {
+    if (!doc || typeof doc !== 'object') return {};
+    if (doc.data && typeof doc.data === 'object') {
+      return doc.data;
+    }
+    return doc;
+  }
+
   function getFilteredColumns(docs) {
     const excluded = new Set(['_id','__v','createdAt','updatedAt','submittedAt','timestamps','metadata','ip','ipAddress','userAgent','id','submitted_at']);
     const seen = new Set();
     const ordered = [];
     for (const d of docs) {
-      for (const k of Object.keys(d.data || {})) {
+      const fields = getRowFields(d);
+      for (const k of Object.keys(fields)) {
         if (excluded.has(k)) continue;
+        if (HIDDEN_FIELD_SET.has(normalizeFieldName(k))) continue;
         if (!seen.has(k)) {
           seen.add(k);
           ordered.push(k);
@@ -214,11 +251,14 @@ function App() {
                   </div>
                   <div className="cards-grid">
                     {docs.map((row, idx) => {
-                      const entriesRaw = Object.entries(row.data || {});
+                      const entriesRaw = Object.entries(getRowFields(row));
                       const excluded = new Set(['_id','__v','createdAt','updatedAt','timestamps','metadata','ipAddress','userAgent','id','submitted_at']);
-                      // Show all fields including null/empty ones
+                      // Show all fields including null/empty ones, except explicitly hidden ones
                       const entries = entriesRaw
-                        .filter(([k, v]) => !excluded.has(k));
+                        .filter(([k]) => {
+                          if (excluded.has(k)) return false;
+                          return !HIDDEN_FIELD_SET.has(normalizeFieldName(k));
+                        });
                       const json = JSON.stringify(row, null, 2);
                       return (
                         <div key={c.collection + '-' + idx} className="doc-card">
@@ -333,7 +373,8 @@ function App() {
                         {docs.map((row, idx) => (
                           <tr key={idx}>
                             {columns.map((col) => {
-                              const val = row.data[col];
+                              const fields = getRowFields(row);
+                              const val = fields[col];
                               let out = '';
                               
                               if (val === null || val === undefined) {
