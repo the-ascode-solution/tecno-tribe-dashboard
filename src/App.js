@@ -260,74 +260,75 @@ function App() {
                           return !HIDDEN_FIELD_SET.has(normalizeFieldName(k));
                         });
                       const json = JSON.stringify(row, null, 2);
+                      const cardKey = `${c.collection}-${idx}`;
+                      const isOpen = !!open[cardKey];
+                      const toggleCard = () => setOpen((o) => ({ ...o, [cardKey]: !o[cardKey] }));
                       return (
-                        <div key={c.collection + '-' + idx} className="doc-card">
+                        <div key={cardKey} className={`doc-card ${isOpen ? 'open' : ''}`}>
                           <div className="doc-title">
-                            <span>Student {idx + 1}</span>
+                            <button className="doc-toggle" onClick={toggleCard} aria-expanded={isOpen}>
+                              <span>Student {idx + 1}</span>
+                              <span className={`chevron ${isOpen ? 'open' : ''}`} aria-hidden="true">▸</span>
+                            </button>
                             <div className="coll-actions">
                               <button className="btn" onClick={() => navigator.clipboard.writeText(json)}>Copy</button>
-                              <button className="btn-secondary btn" onClick={() => setOpen(o => ({ ...o, [c.collection + '-' + idx]: !o[c.collection + '-' + idx] }))}>
-                                {open[c.collection + '-' + idx] ? 'Hide JSON' : 'Show JSON'}
-                              </button>
                             </div>
                           </div>
-                          <div className="kv">
-                            {entries.map(([k, v], i) => {
-                              let value = '';
-                              if (v === null || v === undefined) {
-                                value = '-';
-                              } else if (typeof v === 'string' && v.trim() === '') {
-                                value = '(empty)';
-                              } else if (typeof v === 'object') {
-                                if (Array.isArray(v)) {
-                                  if (v.length === 0) {
-                                    value = '[]';
-                                  } else if (v.length === 1) {
-                                    value = String(v[0]);
-                                  } else {
-                                    value = v.join(', ');
-                                  }
-                                } else {
-                                  // Handle object fields - check if it's a ranking object
-                                  const objKeys = Object.keys(v);
-                                  if (objKeys.length > 0) {
-                                    // Check if this looks like a ranking object (has numeric values)
-                                    const isRanking = objKeys.some(key => !isNaN(v[key]));
-                                    if (isRanking) {
-                                      // Sort by rank (ascending order)
-                                      const sortedEntries = Object.entries(v)
-                                        .sort(([,a], [,b]) => {
-                                          const numA = parseFloat(a);
-                                          const numB = parseFloat(b);
-                                          if (isNaN(numA) && isNaN(numB)) return 0;
-                                          if (isNaN(numA)) return 1;
-                                          if (isNaN(numB)) return -1;
-                                          return numA - numB;
-                                        });
-                                      value = sortedEntries.map(([key, val]) => `${key}: ${val}`).join(', ');
+                          {isOpen && (
+                            <>
+                              <div className="kv">
+                                {entries.map(([k, v], i) => {
+                                  let value = '';
+                                  if (v === null || v === undefined) {
+                                    value = '-';
+                                  } else if (typeof v === 'string' && v.trim() === '') {
+                                    value = '(empty)';
+                                  } else if (typeof v === 'object') {
+                                    if (Array.isArray(v)) {
+                                      if (v.length === 0) {
+                                        value = '[]';
+                                      } else if (v.length === 1) {
+                                        value = String(v[0]);
+                                      } else {
+                                        value = v.join(', ');
+                                      }
                                     } else {
-                                      value = objKeys.map(key => `${key}: ${v[key]}`).join(', ');
+                                      // Handle object fields - check if it's a ranking object
+                                      const objKeys = Object.keys(v);
+                                      if (objKeys.length > 0) {
+                                        // Check if this looks like a ranking object (has numeric values)
+                                        const isRanking = objKeys.some(key => !isNaN(v[key]));
+                                        if (isRanking) {
+                                          // Sort by rank (ascending order)
+                                          const sortedEntries = Object.entries(v)
+                                            .sort(([,a], [,b]) => {
+                                              const numA = parseFloat(a);
+                                              const numB = parseFloat(b);
+                                              if (isNaN(numA) && isNaN(numB)) return 0;
+                                              if (isNaN(numA)) return 1;
+                                              if (isNaN(numB)) return -1;
+                                              return numA - numB;
+                                            });
+                                          value = sortedEntries.map(([key, val]) => `${key}: ${val}`).join(', ');
+                                        } else {
+                                          value = objKeys.map(key => `${key}: ${v[key]}`).join(', ');
+                                        }
+                                      } else {
+                                        value = '{}';
+                                      }
                                     }
                                   } else {
-                                    value = '{}';
+                                    value = String(v);
                                   }
-                                }
-                              } else {
-                                value = String(v);
-                              }
-                              return (
-                                <div key={k + '-' + i} style={{ contents: 'unset' }}>
-                                  <div className="k">{k}</div>
-                                  <div className="v">{value}</div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                          {open[c.collection + '-' + idx] && (
-                            <div style={{ marginTop: 10 }}>
-                              <div className="section-title">JSON</div>
-                              <pre className="pre">{json}</pre>
-                            </div>
+                                  return (
+                                    <div key={k + '-' + i} style={{ contents: 'unset' }}>
+                                      <div className="k">{k}</div>
+                                      <div className="v">{value}</div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </>
                           )}
                         </div>
                       );
