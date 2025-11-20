@@ -22,6 +22,43 @@ const HIDDEN_FIELDS = [
 
 const HIDDEN_FIELD_SET = new Set(HIDDEN_FIELDS.map(normalizeFieldName));
 
+const DATE_FIELD_NAMES = [
+  'createdAt','created_at',
+  'updatedAt','updated_at',
+  'submittedAt','submitted_at',
+  'timestamp','Timestamp',
+  'submissionDate','submission_date',
+  'date','Date',
+  'time','Time',
+];
+
+function parseDateValue(value) {
+  if (!value) return null;
+  if (value instanceof Date) {
+    const ts = value.getTime();
+    return Number.isNaN(ts) ? null : ts;
+  }
+  if (typeof value === 'string') {
+    const ts = Date.parse(value);
+    return Number.isNaN(ts) ? null : ts;
+  }
+  if (typeof value === 'number') {
+    if (value > 1e12) return value;
+    if (value > 1e9) return value * 1000;
+    return null;
+  }
+  if (typeof value === 'object') {
+    if ('$date' in value) return parseDateValue(value.$date);
+    if ('seconds' in value) return value.seconds * 1000;
+  }
+  return null;
+}
+
+function collectDateCandidates(source) {
+  if (!source || typeof source !== 'object') return [];
+  return DATE_FIELD_NAMES.map((key) => source[key]).filter(Boolean);
+}
+
 function normalizeFieldName(value) {
   return (value ?? '')
     .toString()
@@ -66,37 +103,51 @@ function App() {
       .finally(() => setLoading(false));
   }, [isAuthed]);
 
-  const collections = useMemo(() => {
+  const baseCollections = useMemo(() => {
     if (!data || !data.collections) return [];
-    let list = data.collections;
-    // Exclude sessions entirely
-    list = list.filter((c) => c.collection.toLowerCase() !== 'sessions');
-    // Filter by tab
-    list = list.filter((c) => {
-      const name = c.collection.toLowerCase();
-      if (activeTab === 'surveys') return name.includes('survey');
-      if (activeTab === 'analytics') return name.includes('analytic');
-      return true;
-    });
+    return data.collections.filter((c) => c.collection.toLowerCase() !== 'sessions');
+  }, [data]);
+
+  const collections = useMemo(() => {
+    let list = baseCollections;
+    if (activeTab === 'surveys') {
+      list = list.filter((c) => c.collection.toLowerCase().includes('survey'));
+    }
     if (!query) return list;
     const q = query.toLowerCase();
     return list.filter(c => c.collection.toLowerCase().includes(q));
-  }, [data, query, activeTab]);
+  }, [baseCollections, query, activeTab]);
 
   const totalDocs = useMemo(() => {
     return collections.reduce((acc, c) => acc + (c.count || (c.docs?.length || 0)), 0);
   }, [collections]);
 
+  const dailyCounts = useMemo(() => {
+    const map = new Map();
+    baseCollections.forEach((c) => {
+      (c.docs || []).forEach((doc) => {
+        const date = getDocDate(doc);
+        if (!date) return;
+        map.set(date, (map.get(date) || 0) + 1);
+      });
+    });
+    return Array.from(map.entries())
+      .sort((a, b) => (a[0] < b[0] ? 1 : -1))
+      .map(([date, count]) => ({ date, count }));
+  }, [baseCollections]);
+
   function getDocTime(doc) {
-    const tryDates = [
-      doc?.createdAt,
-      doc?.submittedAt,
-      doc?.timestamps?.createdAt,
-      doc?.metadata?.createdAt,
-    ].filter(Boolean);
-    if (tryDates.length > 0) {
-      const t = Date.parse(tryDates[0]);
-      if (!Number.isNaN(t)) return t;
+    const candidates = [
+      ...collectDateCandidates(doc),
+      ...collectDateCandidates(doc?.timestamps),
+      ...collectDateCandidates(doc?.metadata),
+    ];
+    if (doc?.data && typeof doc.data === 'object') {
+      candidates.push(...collectDateCandidates(doc.data));
+    }
+    for (const value of candidates) {
+      const parsed = parseDateValue(value);
+      if (parsed) return parsed;
     }
     const id = doc?._id;
     if (typeof id === 'string' && id.length >= 8) {
@@ -110,6 +161,14 @@ function App() {
       if (!Number.isNaN(ts)) return ts * 1000;
     }
     return 0;
+  }
+
+  function getDocDate(doc) {
+    const ts = getDocTime(doc);
+    if (!ts) return null;
+    const d = new Date(ts);
+    if (Number.isNaN(d.getTime())) return null;
+    return d.toISOString().split('T')[0];
   }
 
   function getRowFields(doc) {
@@ -237,7 +296,42 @@ function App() {
           <div className="card">No collections found or database is empty.</div>
         )}
 
-        {viewMode === 'cards' && (
+        {activeTab === 'analytics' && (
+          <div className="card fade-in" style={{ marginBottom: 16 }}>
+            <div className="coll-header" style={{ marginBottom: 8 }}>
+              <div className="coll-name">Daily form submissions</div>
+              <div className="coll-actions">
+                <span className="label">Tracking {dailyCounts.length} day{dailyCounts.length === 1 ? '' : 's'}</span>
+              </div>
+            </div>
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Forms submitted</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {dailyCounts.length === 0 ? (
+                    <tr>
+                      <td colSpan={2}>No submissions found.</td>
+                    </tr>
+                  ) : (
+                    dailyCounts.map((row) => (
+                      <tr key={row.date}>
+                        <td>{new Date(row.date).toLocaleDateString()}</td>
+                        <td>{row.count}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'surveys' && viewMode === 'cards' && (
           <div className="card fade-in">
             {collections.map((c) => {
               const docs = (c.docs || []).slice().sort((a, b) => getDocTime(a) - getDocTime(b));
@@ -340,7 +434,7 @@ function App() {
           </div>
         )}
 
-        {viewMode === 'table' && (
+        {activeTab === 'surveys' && viewMode === 'table' && (
           <div className="card fade-in">
             {collections.map((c) => {
               // infer columns from visible fields
