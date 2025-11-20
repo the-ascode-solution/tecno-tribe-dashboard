@@ -34,7 +34,7 @@ app.get('/api/health', (_req, res) => {
   res.json({ ok: true });
 });
 
-// Lists tables and returns first 5 rows from each
+// Lists tables and returns all rows from each
 app.get('/api/data', async (_req, res) => {
   try {
     if (!DATABASE_URL) {
@@ -69,10 +69,18 @@ app.get('/api/data', async (_req, res) => {
       const countResult = await client_pool.query(countQuery);
       const count = parseInt(countResult.rows[0].count);
       
-      // Get first 5 rows
-      const dataQuery = `SELECT * FROM "${tableName}" LIMIT 5;`;
+      // Get all rows via aggregation to avoid implicit row limits
+      const dataQuery = `
+        SELECT json_agg(row_data) AS docs
+        FROM (
+          SELECT *
+          FROM "${tableName}"
+          ORDER BY 1
+        ) AS row_data;
+      `;
       const dataResult = await client_pool.query(dataQuery);
-      const docs = dataResult.rows;
+      const docs = dataResult.rows[0]?.docs || [];
+      console.log(`[api/data] ${tableName}: count=${count}, docsReturned=${docs.length}`);
       
       result.push({ 
         collection: tableName, 

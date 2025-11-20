@@ -263,7 +263,7 @@ function App() {
                       return (
                         <div key={c.collection + '-' + idx} className="doc-card">
                           <div className="doc-title">
-                            <span>Document {idx + 1}</span>
+                            <span>Student {idx + 1}</span>
                             <div className="coll-actions">
                               <button className="btn" onClick={() => navigator.clipboard.writeText(json)}>Copy</button>
                               <button className="btn-secondary btn" onClick={() => setOpen(o => ({ ...o, [c.collection + '-' + idx]: !o[c.collection + '-' + idx] }))}>
