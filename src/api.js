@@ -1,18 +1,33 @@
-export async function fetchDashboardData() {
-  // Try via CRA proxy first
-  let res = await fetch('/api/data').catch(() => null);
-  if (res && res.ok) return res.json();
+const ENDPOINTS = [
+  '/.netlify/functions/data', // Netlify production + `netlify dev`
+  '/api/data',                // CRA proxy (optional)
+  'http://localhost:5000/api/data', // Local Express server fallback
+];
 
-  // Fallback directly to backend (useful if app started with `npm start` only)
-  res = await fetch('http://localhost:5000/api/data').catch((e) => {
-    throw new Error(e?.message || 'Network error');
-  });
-  if (!res.ok) {
-    let detail = '';
-    try { detail = await res.text(); } catch {}
-    throw new Error(`Failed to fetch data (${res.status}) ${detail}`.trim());
+export async function fetchDashboardData() {
+  let lastError = null;
+  for (const url of ENDPOINTS) {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) {
+        const detail = await safeReadText(res);
+        throw new Error(`Failed to fetch data (${res.status}) ${detail}`.trim());
+      }
+      return await res.json();
+    } catch (err) {
+      lastError = err;
+      // try next endpoint
+    }
   }
-  return res.json();
+  throw lastError || new Error('Failed to fetch data');
+}
+
+async function safeReadText(response) {
+  try {
+    return await response.text();
+  } catch {
+    return '';
+  }
 }
 
 
