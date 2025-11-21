@@ -61,6 +61,41 @@ function collectDateCandidates(source) {
   return DATE_FIELD_NAMES.map((key) => source[key]).filter(Boolean);
 }
 
+function getDocTime(doc) {
+  const candidates = [
+    ...collectDateCandidates(doc),
+    ...collectDateCandidates(doc?.timestamps),
+    ...collectDateCandidates(doc?.metadata),
+  ];
+  if (doc?.data && typeof doc.data === 'object') {
+    candidates.push(...collectDateCandidates(doc.data));
+  }
+  for (const value of candidates) {
+    const parsed = parseDateValue(value);
+    if (parsed) return parsed;
+  }
+  const id = doc?._id;
+  if (typeof id === 'string' && id.length >= 8) {
+    const hex = id.slice(0, 8);
+    const ts = parseInt(hex, 16);
+    if (!Number.isNaN(ts)) return ts * 1000;
+  }
+  if (typeof id === 'object' && typeof id?.$oid === 'string') {
+    const hex = id.$oid.slice(0, 8);
+    const ts = parseInt(hex, 16);
+    if (!Number.isNaN(ts)) return ts * 1000;
+  }
+  return 0;
+}
+
+function getDocDate(doc) {
+  const ts = getDocTime(doc);
+  if (!ts) return null;
+  const d = new Date(ts);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toISOString().split('T')[0];
+}
+
 function normalizeFieldName(value) {
   return (value ?? '')
     .toString()
@@ -137,41 +172,6 @@ function App() {
       .sort((a, b) => (a[0] < b[0] ? 1 : -1))
       .map(([date, count]) => ({ date, count }));
   }, [baseCollections]);
-
-  function getDocTime(doc) {
-    const candidates = [
-      ...collectDateCandidates(doc),
-      ...collectDateCandidates(doc?.timestamps),
-      ...collectDateCandidates(doc?.metadata),
-    ];
-    if (doc?.data && typeof doc.data === 'object') {
-      candidates.push(...collectDateCandidates(doc.data));
-    }
-    for (const value of candidates) {
-      const parsed = parseDateValue(value);
-      if (parsed) return parsed;
-    }
-    const id = doc?._id;
-    if (typeof id === 'string' && id.length >= 8) {
-      const hex = id.slice(0, 8);
-      const ts = parseInt(hex, 16);
-      if (!Number.isNaN(ts)) return ts * 1000;
-    }
-    if (typeof id === 'object' && typeof id?.$oid === 'string') {
-      const hex = id.$oid.slice(0, 8);
-      const ts = parseInt(hex, 16);
-      if (!Number.isNaN(ts)) return ts * 1000;
-    }
-    return 0;
-  }
-
-  function getDocDate(doc) {
-    const ts = getDocTime(doc);
-    if (!ts) return null;
-    const d = new Date(ts);
-    if (Number.isNaN(d.getTime())) return null;
-    return d.toISOString().split('T')[0];
-  }
 
   function getRowFields(doc) {
     if (!doc || typeof doc !== 'object') return {};
