@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
+const { randomUUID } = require('crypto');
 require('dotenv').config();
 
 const app = express();
@@ -9,12 +10,35 @@ app.use(express.json());
 
 const PORT = process.env.SERVER_PORT || 5000;
 const DATABASE_URL = process.env.DATABASE_URL || "";
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@tecnotribe.site';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '!password$123*';
+const SESSION_TTL_MS = Number(process.env.SESSION_TTL_MS) || 1000 * 60 * 60; // default 1h
 
 console.log('Environment check:');
 console.log('PORT:', PORT);
 console.log('DATABASE_URL:', DATABASE_URL ? 'Set' : 'Not set');
 
 let pool;
+let activeSession = null;
+
+function sessionActive() {
+  if (!activeSession) return false;
+  if (Date.now() - activeSession.issuedAt > SESSION_TTL_MS) {
+    activeSession = null;
+    return false;
+  }
+  return true;
+}
+
+function clearSessionIfMatch({ token, clientId }) {
+  if (!activeSession) return;
+  if (
+    activeSession.token === token &&
+    (!clientId || activeSession.clientId === clientId)
+  ) {
+    activeSession = null;
+  }
+}
 
 async function connectPostgres() {
   if (pool) return pool;
@@ -32,6 +56,33 @@ async function connectPostgres() {
 
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true });
+});
+
+app.post('/api/login', (req, res) => {
+  const { email, password, clientId } = req.body || {};
+  if (email !== ADMIN_EMAIL || password !== ADMIN_PASSWORD) {
+    return res.status(401).json({ ok: false, error: 'Invalid credentials' });
+  }
+  if (sessionActive()) {
+    return res.status(403).json({ ok: false, error: 'Account already logged in on another device' });
+  }
+  const token = randomUUID();
+  activeSession = { token, clientId: clientId || null, issuedAt: Date.now() };
+  res.json({ ok: true, token, ttlMs: SESSION_TTL_MS });
+});
+
+app.post('/api/logout', (req, res) => {
+  const { token, clientId } = req.body || {};
+  clearSessionIfMatch({ token, clientId });
+  res.json({ ok: true });
+});
+
+app.post('/api/session/check', (req, res) => {
+  const { token } = req.body || {};
+  if (sessionActive() && token === activeSession.token) {
+    return res.json({ ok: true, active: true });
+  }
+  res.json({ ok: true, active: false });
 });
 
 // Lists tables and returns all rows from each

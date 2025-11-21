@@ -2,9 +2,6 @@ import './App.css';
 import { useEffect, useMemo, useState } from 'react';
 import { fetchDashboardData } from './api';
 
-const ADMIN_EMAIL = 'admin@tecnotribe.site';
-const ADMIN_PASSWORD = '!password$123*';
-
 const HIDDEN_FIELDS = [
   'Ambassador',
   'Ambassador Benefits',
@@ -21,6 +18,11 @@ const HIDDEN_FIELDS = [
 ];
 
 const HIDDEN_FIELD_SET = new Set(HIDDEN_FIELDS.map(normalizeFieldName));
+
+const ADMIN_USERS = [
+  { email: 'admin@tecnotribe.site', password: '!password$123*' },
+  { email: 'hussainfarhad509@gmail.com', password: 'Mfarhad@0222_0111' },
+];
 
 const DATE_FIELD_NAMES = [
   'createdAt','created_at',
@@ -200,7 +202,9 @@ function App() {
   function handleLogin(e) {
     e.preventDefault();
     setError('');
-    if (email.trim() === ADMIN_EMAIL && password === ADMIN_PASSWORD) {
+    const normalizedEmail = email.trim().toLowerCase();
+    const isValid = ADMIN_USERS.some((user) => user.email.toLowerCase() === normalizedEmail && user.password === password);
+    if (isValid) {
       setIsAuthed(true);
       sessionStorage.setItem('isAuthed', 'true');
     } else {
@@ -211,6 +215,7 @@ function App() {
   function handleLogout() {
     setIsAuthed(false);
     sessionStorage.removeItem('isAuthed');
+    setData(null);
     setEmail('');
     setPassword('');
   }
