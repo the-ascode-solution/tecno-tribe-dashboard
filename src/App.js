@@ -118,6 +118,8 @@ function App() {
   const [open, setOpen] = useState({});
   const [activeTab, setActiveTab] = useState('surveys'); // 'surveys' | 'analytics'
   const [viewMode, setViewMode] = useState('cards'); // 'cards' | 'table'
+  const [showPassword, setShowPassword] = useState(false);
+  const [sortOption, setSortOption] = useState('name-asc');
 
   useEffect(() => {
     const stored = sessionStorage.getItem('isAuthed');
@@ -151,10 +153,32 @@ function App() {
     if (activeTab === 'surveys') {
       list = list.filter((c) => c.collection.toLowerCase().includes('survey'));
     }
-    if (!query) return list;
-    const q = query.toLowerCase();
-    return list.filter(c => c.collection.toLowerCase().includes(q));
-  }, [baseCollections, query, activeTab]);
+    if (query) {
+      const q = query.toLowerCase();
+      list = list.filter(c => c.collection.toLowerCase().includes(q));
+    }
+
+    const sortable = [...list];
+    sortable.sort((a, b) => {
+      const nameA = a.collection.toLowerCase();
+      const nameB = b.collection.toLowerCase();
+      const countA = typeof a.count === 'number' ? a.count : (a.docs?.length || 0);
+      const countB = typeof b.count === 'number' ? b.count : (b.docs?.length || 0);
+      switch (sortOption) {
+        case 'name-desc':
+          return nameB.localeCompare(nameA);
+        case 'count-asc':
+          return countA - countB;
+        case 'count-desc':
+          return countB - countA;
+        case 'name-asc':
+        default:
+          return nameA.localeCompare(nameB);
+      }
+    });
+
+    return sortable;
+  }, [baseCollections, query, activeTab, sortOption]);
 
   const totalDocs = useMemo(() => {
     return collections.reduce((acc, c) => acc + (c.count || (c.docs?.length || 0)), 0);
@@ -219,6 +243,7 @@ function App() {
     setData(null);
     setEmail('');
     setPassword('');
+    setShowPassword(false);
   }
 
   if (!isAuthed) {
@@ -237,7 +262,70 @@ function App() {
             </div>
             <div className="field">
               <label>Password</label>
-              <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="enter password" required />
+              <div style={{ position: 'relative' }}>
+                <input
+                  className="input"
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="enter password"
+                  required
+                  style={{ width: '100%', paddingRight: 48, boxSizing: 'border-box' }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  style={{
+                    position: 'absolute',
+                    top: '50%',
+                    right: 10,
+                    transform: 'translateY(-50%)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: 6,
+                    border: 'none',
+                    background: 'none',
+                    cursor: 'pointer',
+                    color: '#555'
+                  }}
+                >
+                  {showPassword ? (
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 24 24"
+                      width="20"
+                      height="20"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M3 3l18 18" />
+                      <path d="M10.58 10.58a2 2 0 102.83 2.83" />
+                      <path d="M16.24 16.24A9.5 9.5 0 0112 18c-5 0-9-4.5-9-6 0-.7 1.25-2.54 3.5-4.19" />
+                      <path d="M14.12 5.18A9.77 9.77 0 0112 5c-5 0-9 4.5-9 6 0 .39.33 1.18.97 2.05" />
+                    </svg>
+                  ) : (
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 24 24"
+                      width="20"
+                      height="20"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z" />
+                      <circle cx="12" cy="12" r="3" />
+                    </svg>
+                  )}
+                </button>
+              </div>
             </div>
             {error && <div className="error">{error}</div>}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
@@ -261,6 +349,18 @@ function App() {
           </div>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
             <input className="input" placeholder="Search collections…" value={query} onChange={(e) => setQuery(e.target.value)} />
+            <select
+              className="input"
+              value={sortOption}
+              onChange={(e) => setSortOption(e.target.value)}
+              style={{ minWidth: 160 }}
+              aria-label="Sort collections"
+            >
+              <option value="name-asc">Name · A → Z</option>
+              <option value="name-desc">Name · Z → A</option>
+              <option value="count-desc">Documents · High → Low</option>
+              <option value="count-asc">Documents · Low → High</option>
+            </select>
             <div className="segmented">
               <button className={viewMode === 'cards' ? 'active' : ''} onClick={() => setViewMode('cards')}>Cards</button>
               <button className={viewMode === 'table' ? 'active' : ''} onClick={() => setViewMode('table')}>Table</button>
