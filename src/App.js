@@ -1,6 +1,7 @@
 import './App.css';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { fetchDashboardData } from './api';
+import * as XLSX from 'xlsx';
 
 const HIDDEN_FIELDS = [
   'Ambassador',
@@ -145,6 +146,49 @@ function getColumnFilterKey(collection, column) {
   return `${collection}__${column}`;
 }
 
+function getSafeSheetName(name = 'Sheet') {
+  return (name || 'Sheet')
+    .toString()
+    .replace(/[\\/?*\[\]:]/g, '_')
+    .slice(0, 31)
+    || 'Sheet';
+}
+
+function formatFieldValue(val, { truncate = true } = {}) {
+  if (val === null || val === undefined) return '-';
+  if (typeof val === 'boolean') return val ? 'Yes' : 'No';
+  if (typeof val === 'string') {
+    const trimmed = val.trim();
+    if (trimmed.length === 0) return '(empty)';
+    if (truncate && trimmed.length > 50) {
+      return `${trimmed.substring(0, 47)}...`;
+    }
+    return trimmed;
+  }
+  if (Array.isArray(val)) {
+    if (val.length === 0) return '[]';
+    if (val.length === 1) return formatFieldValue(val[0], { truncate });
+    return val.map((item) => formatFieldValue(item, { truncate })).join(', ');
+  }
+  if (typeof val === 'object') {
+    const keys = Object.keys(val);
+    if (keys.length === 0) return '{}';
+    const isRanking = keys.some((key) => !Number.isNaN(parseFloat(val[key])));
+    const entries = isRanking
+      ? Object.entries(val).sort(([, a], [, b]) => {
+          const numA = parseFloat(a);
+          const numB = parseFloat(b);
+          if (Number.isNaN(numA) && Number.isNaN(numB)) return 0;
+          if (Number.isNaN(numA)) return 1;
+          if (Number.isNaN(numB)) return -1;
+          return numA - numB;
+        })
+      : Object.entries(val);
+    return entries.map(([key, value]) => `${key}: ${value}`).join(', ');
+  }
+  return String(val);
+}
+
 const COLUMN_FILTER_ALL = '__all__';
 const REFRESH_INTERVAL_MS = 3 * 60 * 60 * 1000; // refresh data every 3 hours to keep filters up to date
 
@@ -245,6 +289,39 @@ function App() {
       .filter((c) => !filterDate || (c.displayDocs && c.displayDocs.length > 0));
   }, [baseCollections, query, activeTab, sortOption, filterDate]);
 
+  const tableCollections = useMemo(() => {
+    return collections.map((c) => {
+      const docs = c.displayDocs || [];
+      const columns = getFilteredColumns(docs);
+      const columnValueMap = columns.reduce((acc, col) => {
+        const values = new Set();
+        docs.forEach((row) => {
+          const fields = getRowFields(row);
+          values.add(normalizeFilterValue(fields[col]));
+        });
+        acc[col] = Array.from(values).sort((a, b) => a.localeCompare(b));
+        return acc;
+      }, {});
+
+      const visibleDocs = docs.filter((row) => {
+        const fields = getRowFields(row);
+        return columns.every((col) => {
+          const key = getColumnFilterKey(c.collection, col);
+          const selected = columnFilters[key];
+          if (!selected) return true;
+          return normalizeFilterValue(fields[col]) === selected;
+        });
+      });
+
+      return { ...c, columns, columnValueMap, visibleDocs };
+    });
+  }, [collections, columnFilters]);
+
+  const hasExportableData = useMemo(
+    () => tableCollections.some((c) => c.visibleDocs.length > 0),
+    [tableCollections]
+  );
+
   const totalDocs = useMemo(() => {
     return collections.reduce((acc, c) => acc + (c.displayDocs?.length || 0), 0);
   }, [collections]);
@@ -268,6 +345,43 @@ function App() {
   const handleManualRefresh = useCallback(() => {
     loadData(true);
   }, [loadData]);
+
+  const handleExportVisible = useCallback(() => {
+    if (!hasExportableData) {
+      window.alert('No visible data to export. Adjust filters or date selection and try again.');
+      return;
+    }
+
+    const workbook = XLSX.utils.book_new();
+    let sheetsAdded = 0;
+
+    tableCollections.forEach(({ collection, columns, visibleDocs }) => {
+      if (!visibleDocs.length) return;
+      const header = columns.length ? columns : ['Record'];
+      const rows = [header];
+
+      visibleDocs.forEach((row) => {
+        const fields = getRowFields(row);
+        if (columns.length) {
+          rows.push(columns.map((col) => formatFieldValue(fields[col], { truncate: false })));
+        } else {
+          rows.push([JSON.stringify(fields)]);
+        }
+      });
+
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+      XLSX.utils.book_append_sheet(workbook, ws, getSafeSheetName(collection));
+      sheetsAdded += 1;
+    });
+
+    if (sheetsAdded === 0) {
+      const ws = XLSX.utils.aoa_to_sheet([['Message'], ['No data available for export']]);
+      XLSX.utils.book_append_sheet(workbook, ws, 'Summary');
+    }
+
+    const timestamp = new Date().toISOString().replace(/[:T]/g, '-').split('.')[0];
+    XLSX.writeFile(workbook, `TecnoTribe-dashboard-${timestamp}.xlsx`);
+  }, [hasExportableData, tableCollections]);
 
   function getRowFields(doc) {
     if (!doc || typeof doc !== 'object') return {};
@@ -553,33 +667,17 @@ function App() {
 
         {activeTab === 'surveys' && viewMode === 'table' && (
           <div className="card fade-in">
-            {collections.map((c) => {
-              const docs = c.displayDocs || [];
-              const columns = getFilteredColumns(docs);
-              const columnValueMap = columns.reduce((acc, col) => {
-                const values = new Set();
-                docs.forEach((row) => {
-                  const fields = getRowFields(row);
-                  values.add(normalizeFilterValue(fields[col]));
-                });
-                acc[col] = Array.from(values).sort((a, b) => a.localeCompare(b));
-                return acc;
-              }, {});
-
-              const visibleDocs = docs.filter((row) => {
-                const fields = getRowFields(row);
-                return columns.every((col) => {
-                  const key = getColumnFilterKey(c.collection, col);
-                  const selected = columnFilters[key];
-                  if (!selected) return true;
-                  return normalizeFilterValue(fields[col]) === selected;
-                });
-              });
-
+            {tableCollections.map((c) => {
+              const { columns, columnValueMap, visibleDocs } = c;
               return (
                 <div key={c.collection} style={{ marginBottom: 16 }}>
                   <div className="coll-header" style={{ marginBottom: 8 }}>
                     <div className="coll-name">{c.collection} ({visibleDocs.length}{!filterDate && typeof c.count === 'number' ? ` / ${c.count}` : ''})</div>
+                    <div className="coll-actions">
+                      <button className="btn" onClick={handleExportVisible} disabled={!hasExportableData}>
+                        Export visible (.xlsx)
+                      </button>
+                    </div>
                   </div>
                   <div className="table-wrap">
                     <table>
@@ -590,23 +688,23 @@ function App() {
                               .replace(/([A-Z])/g, ' $1')
                               .replace(/^./, str => str.toUpperCase())
                               .replace(/_/g, ' ')
-                              .replace(/\b\w/g, l => l.toUpperCase())
                               .trim();
-                            const key = getColumnFilterKey(c.collection, col);
-                            const selectedValue = columnFilters[key] || COLUMN_FILTER_ALL;
-                            const availableValues = columnValueMap[col] || [];
+                            const filterKey = getColumnFilterKey(c.collection, col);
+                            const selectedValue = columnFilters[filterKey] || '__all__';
+                            const availableValues = Array.from(columnValueMap[col] || []);
                             return (
                               <th key={col}>
-                                <div className="column-filter">
-                                  <span>{formattedCol}</span>
+                                <div className="col-header">
+                                  <span>{formattedCol || 'Field'}</span>
                                   <select
-                                    className="input column-filter-select"
                                     value={selectedValue}
                                     onChange={(e) => handleColumnFilterChange(c.collection, col, e.target.value)}
                                   >
-                                    <option value={COLUMN_FILTER_ALL}>All answers</option>
-                                    {availableValues.map((value) => (
-                                      <option key={value} value={value}>{value}</option>
+                                    <option value="__all__">All answers</option>
+                                    {availableValues.map((val) => (
+                                      <option key={val} value={val}>
+                                        {val}
+                                      </option>
                                     ))}
                                   </select>
                                 </div>
@@ -618,65 +716,24 @@ function App() {
                       <tbody>
                         {visibleDocs.length === 0 ? (
                           <tr>
-                            <td colSpan={Math.max(columns.length, 1)} style={{ textAlign: 'center', padding: '24px 16px' }}>No results match the selected filters.</td>
+                            <td colSpan={columns.length || 1} style={{ textAlign: 'center', padding: '24px 0' }}>
+                              No responses match the current filters.
+                            </td>
                           </tr>
                         ) : (
-                          visibleDocs.map((row, idx) => (
-                            <tr key={idx}>
-                              {columns.map((col) => {
-                                const fields = getRowFields(row);
-                                const val = fields[col];
-                                let out = '';
-
-                                if (val === null || val === undefined) {
-                                  out = '-';
-                                } else if (typeof val === 'string' && val.trim() === '') {
-                                  out = '(empty)';
-                                } else if (typeof val === 'object') {
-                                  if (Array.isArray(val)) {
-                                    if (val.length === 0) {
-                                      out = '[]';
-                                    } else if (val.length === 1) {
-                                      out = String(val[0]);
-                                    } else {
-                                      out = val.join(', ');
-                                    }
-                                  } else {
-                                    const objKeys = Object.keys(val);
-                                    if (objKeys.length > 0) {
-                                      const isRanking = objKeys.some(key => !isNaN(val[key]));
-                                      if (isRanking) {
-                                        const sortedEntries = Object.entries(val)
-                                          .sort(([,a], [,b]) => {
-                                            const numA = parseFloat(a);
-                                            const numB = parseFloat(b);
-                                            if (isNaN(numA) && isNaN(numB)) return 0;
-                                            if (isNaN(numA)) return 1;
-                                            if (isNaN(numB)) return -1;
-                                            return numA - numB;
-                                          });
-                                        out = sortedEntries.map(([key, value]) => `${key}: ${value}`).join(', ');
-                                      } else {
-                                        out = objKeys.map(key => `${key}: ${val[key]}`).join(', ');
-                                      }
-                                    } else {
-                                      out = '{}';
-                                    }
-                                  }
-                                } else if (typeof val === 'boolean') {
-                                  out = val ? 'Yes' : 'No';
-                                } else if (typeof val === 'string' && val.length > 50) {
-                                  out = val.substring(0, 47) + '...';
-                                } else {
-                                  out = String(val);
-                                }
-
-                                return (
-                                  <td key={col + idx} title={typeof val === 'object' ? JSON.stringify(val, null, 2) : String(val)}>
-                                    {out}
+                          visibleDocs.map((doc, idx) => (
+                            <tr key={doc.id || idx}>
+                              {columns.length === 0 ? (
+                                <td>
+                                  <pre>{JSON.stringify(getRowFields(doc), null, 2)}</pre>
+                                </td>
+                              ) : (
+                                columns.map((col) => (
+                                  <td key={col}>
+                                    {formatFieldValue(getRowFields(doc)[col])}
                                   </td>
-                                );
-                              })}
+                                ))
+                              )}
                             </tr>
                           ))
                         )}
