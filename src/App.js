@@ -1,5 +1,5 @@
 import './App.css';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { fetchDashboardData } from './api';
 
 const HIDDEN_FIELDS = [
@@ -120,6 +120,34 @@ function formatDateLabel(dateString) {
   }
 }
 
+function normalizeFilterValue(value) {
+  if (value === null || value === undefined) return '(blank)';
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed.length === 0 ? '(empty)' : trimmed;
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+  if (Array.isArray(value)) {
+    if (value.length === 0) return '[]';
+    return value.map((v) => normalizeFilterValue(v)).join(', ');
+  }
+  if (typeof value === 'object') {
+    const entries = Object.entries(value);
+    if (entries.length === 0) return '{}';
+    return entries.map(([k, v]) => `${k}: ${normalizeFilterValue(v)}`).join(', ');
+  }
+  return String(value);
+}
+
+function getColumnFilterKey(collection, column) {
+  return `${collection}__${column}`;
+}
+
+const COLUMN_FILTER_ALL = '__all__';
+const REFRESH_INTERVAL_MS = 3 * 60 * 60 * 1000; // refresh data every 3 hours to keep filters up to date
+
 function App() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -134,16 +162,20 @@ function App() {
   const [showPassword, setShowPassword] = useState(false);
   const [sortOption, setSortOption] = useState('name-asc');
   const [filterDate, setFilterDate] = useState(null);
+  const [columnFilters, setColumnFilters] = useState({});
 
   useEffect(() => {
     const stored = sessionStorage.getItem('isAuthed');
     if (stored === 'true') setIsAuthed(true);
   }, []);
 
-  useEffect(() => {
+  const loadData = useCallback((showSpinner = true) => {
     if (!isAuthed) return;
-    setLoading(true);
-    setError('');
+    if (showSpinner) {
+      setLoading(true);
+      setError('');
+    }
+
     fetchDashboardData()
       .then((json) => {
         setData(json);
@@ -154,8 +186,21 @@ function App() {
         }
       })
       .catch((e) => setError(e.message || 'Failed to load'))
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (showSpinner) setLoading(false);
+      });
   }, [isAuthed]);
+
+  useEffect(() => {
+    if (!isAuthed) return;
+    loadData();
+  }, [isAuthed, loadData]);
+
+  useEffect(() => {
+    if (!isAuthed) return;
+    const id = setInterval(() => loadData(false), REFRESH_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [isAuthed, loadData]);
 
   const baseCollections = useMemo(() => {
     if (!data || !data.collections) return [];
@@ -220,6 +265,10 @@ function App() {
 
   const sortSelectValue = filterDate ? `date:${filterDate}` : sortOption;
 
+  const handleManualRefresh = useCallback(() => {
+    loadData(true);
+  }, [loadData]);
+
   function getRowFields(doc) {
     if (!doc || typeof doc !== 'object') return {};
     if (doc.data && typeof doc.data === 'object') {
@@ -268,6 +317,7 @@ function App() {
     setShowPassword(false);
     setFilterDate(null);
     setSortOption('name-asc');
+    setColumnFilters({});
   }
 
   function handleSortChange(value) {
@@ -278,6 +328,22 @@ function App() {
       setFilterDate(null);
       setSortOption(value);
     }
+  }
+
+  function handleColumnFilterChange(collection, column, value) {
+    const key = getColumnFilterKey(collection, column);
+    setColumnFilters((prev) => {
+      if (value === COLUMN_FILTER_ALL) {
+        if (!(key in prev)) return prev;
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      }
+      return {
+        ...prev,
+        [key]: value,
+      };
+    });
   }
 
   if (!isAuthed) {
@@ -410,6 +476,9 @@ function App() {
               <button className={viewMode === 'cards' ? 'active' : ''} onClick={() => setViewMode('cards')}>Cards</button>
               <button className={viewMode === 'table' ? 'active' : ''} onClick={() => setViewMode('table')}>Table</button>
             </div>
+            <button className="btn-secondary btn" onClick={handleManualRefresh} disabled={loading} title="Refresh dashboard">
+              {loading ? 'Refreshing…' : 'Refresh'}
+            </button>
             <button className="btn-secondary btn" onClick={handleLogout}>Logout</button>
           </div>
         </div>
@@ -479,6 +548,147 @@ function App() {
                 </tbody>
               </table>
             </div>
+          </div>
+        )}
+
+        {activeTab === 'surveys' && viewMode === 'table' && (
+          <div className="card fade-in">
+            {collections.map((c) => {
+              const docs = c.displayDocs || [];
+              const columns = getFilteredColumns(docs);
+              const columnValueMap = columns.reduce((acc, col) => {
+                const values = new Set();
+                docs.forEach((row) => {
+                  const fields = getRowFields(row);
+                  values.add(normalizeFilterValue(fields[col]));
+                });
+                acc[col] = Array.from(values).sort((a, b) => a.localeCompare(b));
+                return acc;
+              }, {});
+
+              const visibleDocs = docs.filter((row) => {
+                const fields = getRowFields(row);
+                return columns.every((col) => {
+                  const key = getColumnFilterKey(c.collection, col);
+                  const selected = columnFilters[key];
+                  if (!selected) return true;
+                  return normalizeFilterValue(fields[col]) === selected;
+                });
+              });
+
+              return (
+                <div key={c.collection} style={{ marginBottom: 16 }}>
+                  <div className="coll-header" style={{ marginBottom: 8 }}>
+                    <div className="coll-name">{c.collection} ({visibleDocs.length}{!filterDate && typeof c.count === 'number' ? ` / ${c.count}` : ''})</div>
+                    <div className="coll-actions">
+                      <button className="btn-secondary btn" onClick={() => navigator.clipboard.writeText(JSON.stringify(visibleDocs, null, 2))}>Copy JSON</button>
+                    </div>
+                  </div>
+                  <div className="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          {columns.map((col) => {
+                            const formattedCol = col
+                              .replace(/([A-Z])/g, ' $1')
+                              .replace(/^./, str => str.toUpperCase())
+                              .replace(/_/g, ' ')
+                              .replace(/\b\w/g, l => l.toUpperCase())
+                              .trim();
+                            const key = getColumnFilterKey(c.collection, col);
+                            const selectedValue = columnFilters[key] || COLUMN_FILTER_ALL;
+                            const availableValues = columnValueMap[col] || [];
+                            return (
+                              <th key={col}>
+                                <div className="column-filter">
+                                  <span>{formattedCol}</span>
+                                  <select
+                                    className="input column-filter-select"
+                                    value={selectedValue}
+                                    onChange={(e) => handleColumnFilterChange(c.collection, col, e.target.value)}
+                                  >
+                                    <option value={COLUMN_FILTER_ALL}>All answers</option>
+                                    {availableValues.map((value) => (
+                                      <option key={value} value={value}>{value}</option>
+                                    ))}
+                                  </select>
+                                </div>
+                              </th>
+                            );
+                          })}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {visibleDocs.length === 0 ? (
+                          <tr>
+                            <td colSpan={Math.max(columns.length, 1)} style={{ textAlign: 'center', padding: '24px 16px' }}>No results match the selected filters.</td>
+                          </tr>
+                        ) : (
+                          visibleDocs.map((row, idx) => (
+                            <tr key={idx}>
+                              {columns.map((col) => {
+                                const fields = getRowFields(row);
+                                const val = fields[col];
+                                let out = '';
+
+                                if (val === null || val === undefined) {
+                                  out = '-';
+                                } else if (typeof val === 'string' && val.trim() === '') {
+                                  out = '(empty)';
+                                } else if (typeof val === 'object') {
+                                  if (Array.isArray(val)) {
+                                    if (val.length === 0) {
+                                      out = '[]';
+                                    } else if (val.length === 1) {
+                                      out = String(val[0]);
+                                    } else {
+                                      out = val.join(', ');
+                                    }
+                                  } else {
+                                    const objKeys = Object.keys(val);
+                                    if (objKeys.length > 0) {
+                                      const isRanking = objKeys.some(key => !isNaN(val[key]));
+                                      if (isRanking) {
+                                        const sortedEntries = Object.entries(val)
+                                          .sort(([,a], [,b]) => {
+                                            const numA = parseFloat(a);
+                                            const numB = parseFloat(b);
+                                            if (isNaN(numA) && isNaN(numB)) return 0;
+                                            if (isNaN(numA)) return 1;
+                                            if (isNaN(numB)) return -1;
+                                            return numA - numB;
+                                          });
+                                        out = sortedEntries.map(([key, value]) => `${key}: ${value}`).join(', ');
+                                      } else {
+                                        out = objKeys.map(key => `${key}: ${val[key]}`).join(', ');
+                                      }
+                                    } else {
+                                      out = '{}';
+                                    }
+                                  }
+                                } else if (typeof val === 'boolean') {
+                                  out = val ? 'Yes' : 'No';
+                                } else if (typeof val === 'string' && val.length > 50) {
+                                  out = val.substring(0, 47) + '...';
+                                } else {
+                                  out = String(val);
+                                }
+
+                                return (
+                                  <td key={col + idx} title={typeof val === 'object' ? JSON.stringify(val, null, 2) : String(val)}>
+                                    {out}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
 
@@ -585,102 +795,6 @@ function App() {
           </div>
         )}
 
-        {activeTab === 'surveys' && viewMode === 'table' && (
-          <div className="card fade-in">
-            {collections.map((c) => {
-              // infer columns from visible fields
-              const docs = c.displayDocs || [];
-              const columns = getFilteredColumns(docs);
-              return (
-                <div key={c.collection} style={{ marginBottom: 16 }}>
-                  <div className="coll-header" style={{ marginBottom: 8 }}>
-                    <div className="coll-name">{c.collection} ({docs.length}{!filterDate && typeof c.count === 'number' ? ` / ${c.count}` : ''})</div>
-                    <div className="coll-actions">
-                      <button className="btn-secondary btn" onClick={() => navigator.clipboard.writeText(JSON.stringify(docs, null, 2))}>Copy JSON</button>
-                    </div>
-                  </div>
-                  <div className="table-wrap">
-                    <table>
-                      <thead>
-                        <tr>
-                          {columns.map((col) => {
-                            // Format column names to be more readable
-                            const formattedCol = col
-                              .replace(/([A-Z])/g, ' $1') // Add space before capital letters
-                              .replace(/^./, str => str.toUpperCase()) // Capitalize first letter
-                              .replace(/_/g, ' ') // Replace underscores with spaces
-                              .replace(/\b\w/g, l => l.toUpperCase()) // Capitalize each word
-                              .trim();
-                            return <th key={col}>{formattedCol}</th>;
-                          })}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {docs.map((row, idx) => (
-                          <tr key={idx}>
-                            {columns.map((col) => {
-                              const fields = getRowFields(row);
-                              const val = fields[col];
-                              let out = '';
-                              
-                              if (val === null || val === undefined) {
-                                out = '-';
-                              } else if (typeof val === 'string' && val.trim() === '') {
-                                out = '(empty)';
-                              } else if (typeof val === 'object') {
-                                if (Array.isArray(val)) {
-                                  if (val.length === 0) {
-                                    out = '[]';
-                                  } else if (val.length === 1) {
-                                    out = String(val[0]);
-                                  } else {
-                                    out = val.join(', ');
-                                  }
-                                } else {
-                                  // Handle object fields - check if it's a ranking object
-                                  const objKeys = Object.keys(val);
-                                  if (objKeys.length > 0) {
-                                    // Check if this looks like a ranking object (has numeric values)
-                                    const isRanking = objKeys.some(key => !isNaN(val[key]));
-                                    if (isRanking) {
-                                      // Sort by rank (ascending order)
-                                      const sortedEntries = Object.entries(val)
-                                        .sort(([,a], [,b]) => {
-                                          const numA = parseFloat(a);
-                                          const numB = parseFloat(b);
-                                          if (isNaN(numA) && isNaN(numB)) return 0;
-                                          if (isNaN(numA)) return 1;
-                                          if (isNaN(numB)) return -1;
-                                          return numA - numB;
-                                        });
-                                      out = sortedEntries.map(([key, value]) => `${key}: ${value}`).join(', ');
-                                    } else {
-                                      out = objKeys.map(key => `${key}: ${val[key]}`).join(', ');
-                                    }
-                                  } else {
-                                    out = '{}';
-                                  }
-                                }
-                              } else if (typeof val === 'boolean') {
-                                out = val ? 'Yes' : 'No';
-                              } else if (typeof val === 'string' && val.length > 50) {
-                                out = val.substring(0, 47) + '...';
-                              } else {
-                                out = String(val);
-                              }
-                              
-                              return <td key={col + idx} title={typeof val === 'object' ? JSON.stringify(val, null, 2) : String(val)}>{out}</td>;
-                            })}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
       </div>
     </div>
   );
