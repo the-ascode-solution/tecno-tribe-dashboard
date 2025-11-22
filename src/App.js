@@ -20,11 +20,32 @@ const HIDDEN_FIELDS = [
 
 const HIDDEN_FIELD_SET = new Set(HIDDEN_FIELDS.map(normalizeFieldName));
 
-const ADMIN_USERS = [
+const FALLBACK_ADMIN_USERS = [
   { email: 'admin@tecnotribe.site', password: '!password$123*' },
   { email: 'hussainfarhad509@gmail.com', password: 'Mfarhad@0222_0111' },
   { email: 'dev@tecnotribe.site', password: 'password123' },
 ];
+
+function parseEnvAdminUsers() {
+  const raw = process.env.REACT_APP_ADMIN_USERS;
+  if (!raw) return null;
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return null;
+
+    const sanitized = parsed.filter(
+      (entry) => entry && typeof entry.email === 'string' && typeof entry.password === 'string'
+    );
+
+    return sanitized.length ? sanitized : null;
+  } catch (error) {
+    console.warn('Invalid REACT_APP_ADMIN_USERS value. Falling back to defaults.', error);
+    return null;
+  }
+}
+
+const ADMIN_USERS = parseEnvAdminUsers() || FALLBACK_ADMIN_USERS;
 
 const DATE_FIELD_NAMES = [
   'createdAt','created_at',
