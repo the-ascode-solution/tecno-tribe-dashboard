@@ -107,6 +107,19 @@ function normalizeFieldName(value) {
     .trim();
 }
 
+function formatDateLabel(dateString) {
+  if (!dateString) return '';
+  try {
+    return new Date(dateString).toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  } catch {
+    return dateString;
+  }
+}
+
 function App() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -120,6 +133,7 @@ function App() {
   const [viewMode, setViewMode] = useState('cards'); // 'cards' | 'table'
   const [showPassword, setShowPassword] = useState(false);
   const [sortOption, setSortOption] = useState('name-asc');
+  const [filterDate, setFilterDate] = useState(null);
 
   useEffect(() => {
     const stored = sessionStorage.getItem('isAuthed');
@@ -177,11 +191,17 @@ function App() {
       }
     });
 
-    return sortable;
-  }, [baseCollections, query, activeTab, sortOption]);
+    return sortable
+      .map((c) => {
+        const docs = (c.docs || []).slice().sort((a, b) => getDocTime(a) - getDocTime(b));
+        const displayDocs = filterDate ? docs.filter((doc) => getDocDate(doc) === filterDate) : docs;
+        return { ...c, displayDocs };
+      })
+      .filter((c) => !filterDate || (c.displayDocs && c.displayDocs.length > 0));
+  }, [baseCollections, query, activeTab, sortOption, filterDate]);
 
   const totalDocs = useMemo(() => {
-    return collections.reduce((acc, c) => acc + (c.count || (c.docs?.length || 0)), 0);
+    return collections.reduce((acc, c) => acc + (c.displayDocs?.length || 0), 0);
   }, [collections]);
 
   const dailyCounts = useMemo(() => {
@@ -197,6 +217,8 @@ function App() {
       .sort((a, b) => (a[0] < b[0] ? 1 : -1))
       .map(([date, count]) => ({ date, count }));
   }, [baseCollections]);
+
+  const sortSelectValue = filterDate ? `date:${filterDate}` : sortOption;
 
   function getRowFields(doc) {
     if (!doc || typeof doc !== 'object') return {};
@@ -244,6 +266,18 @@ function App() {
     setEmail('');
     setPassword('');
     setShowPassword(false);
+    setFilterDate(null);
+    setSortOption('name-asc');
+  }
+
+  function handleSortChange(value) {
+    if (value.startsWith('date:')) {
+      const [, selectedDate] = value.split(':');
+      setFilterDate(selectedDate || null);
+    } else {
+      setFilterDate(null);
+      setSortOption(value);
+    }
   }
 
   if (!isAuthed) {
@@ -351,15 +385,26 @@ function App() {
             <input className="input" placeholder="Search collections…" value={query} onChange={(e) => setQuery(e.target.value)} />
             <select
               className="input"
-              value={sortOption}
-              onChange={(e) => setSortOption(e.target.value)}
-              style={{ minWidth: 160 }}
-              aria-label="Sort collections"
+              value={sortSelectValue}
+              onChange={(e) => handleSortChange(e.target.value)}
+              style={{ minWidth: 180 }}
+              aria-label="Sort collections or filter by date"
             >
-              <option value="name-asc">Name · A → Z</option>
-              <option value="name-desc">Name · Z → A</option>
-              <option value="count-desc">Documents · High → Low</option>
-              <option value="count-asc">Documents · Low → High</option>
+              <optgroup label="Sort by">
+                <option value="name-asc">Name · A → Z</option>
+                <option value="name-desc">Name · Z → A</option>
+                <option value="count-desc">Documents · High → Low</option>
+                <option value="count-asc">Documents · Low → High</option>
+              </optgroup>
+              {dailyCounts.length > 0 && (
+                <optgroup label="Filter by date">
+                  {dailyCounts.map(({ date, count }) => (
+                    <option key={date} value={`date:${date}`}>
+                      {formatDateLabel(date)} · {count} submission{count === 1 ? '' : 's'}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
             </select>
             <div className="segmented">
               <button className={viewMode === 'cards' ? 'active' : ''} onClick={() => setViewMode('cards')}>Cards</button>
@@ -440,11 +485,11 @@ function App() {
         {activeTab === 'surveys' && viewMode === 'cards' && (
           <div className="card fade-in">
             {collections.map((c) => {
-              const docs = (c.docs || []).slice().sort((a, b) => getDocTime(a) - getDocTime(b));
+              const docs = c.displayDocs || [];
               return (
                 <div key={c.collection} style={{ marginBottom: 16 }}>
                   <div className="coll-header" style={{ marginBottom: 8 }}>
-                    <div className="coll-name">{c.collection} ({c.count})</div>
+                    <div className="coll-name">{c.collection} ({docs.length}{!filterDate && typeof c.count === 'number' ? ` / ${c.count}` : ''})</div>
                     <div className="coll-actions">
                       <button className="btn-secondary btn" onClick={() => navigator.clipboard.writeText(JSON.stringify(docs, null, 2))}>Copy All JSON</button>
                     </div>
@@ -544,12 +589,12 @@ function App() {
           <div className="card fade-in">
             {collections.map((c) => {
               // infer columns from visible fields
-              const docs = (c.docs || []).slice().sort((a, b) => getDocTime(a) - getDocTime(b));
+              const docs = c.displayDocs || [];
               const columns = getFilteredColumns(docs);
               return (
                 <div key={c.collection} style={{ marginBottom: 16 }}>
                   <div className="coll-header" style={{ marginBottom: 8 }}>
-                    <div className="coll-name">{c.collection} ({c.count})</div>
+                    <div className="coll-name">{c.collection} ({docs.length}{!filterDate && typeof c.count === 'number' ? ` / ${c.count}` : ''})</div>
                     <div className="coll-actions">
                       <button className="btn-secondary btn" onClick={() => navigator.clipboard.writeText(JSON.stringify(docs, null, 2))}>Copy JSON</button>
                     </div>
