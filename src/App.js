@@ -22,6 +22,7 @@ const HIDDEN_FIELD_SET = new Set(HIDDEN_FIELDS.map(normalizeFieldName));
 const ADMIN_USERS = [
   { email: 'admin@tecnotribe.site', password: '!password$123*' },
   { email: 'hussainfarhad509@gmail.com', password: 'Mfarhad@0222_0111' },
+  { email: 'dev@tecnotribe.site', password: 'password123' },
 ];
 
 const DATE_FIELD_NAMES = [
