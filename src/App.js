@@ -580,9 +580,6 @@ function App() {
                 <div key={c.collection} style={{ marginBottom: 16 }}>
                   <div className="coll-header" style={{ marginBottom: 8 }}>
                     <div className="coll-name">{c.collection} ({visibleDocs.length}{!filterDate && typeof c.count === 'number' ? ` / ${c.count}` : ''})</div>
-                    <div className="coll-actions">
-                      <button className="btn-secondary btn" onClick={() => navigator.clipboard.writeText(JSON.stringify(visibleDocs, null, 2))}>Copy JSON</button>
-                    </div>
                   </div>
                   <div className="table-wrap">
                     <table>
@@ -700,9 +697,7 @@ function App() {
                 <div key={c.collection} style={{ marginBottom: 16 }}>
                   <div className="coll-header" style={{ marginBottom: 8 }}>
                     <div className="coll-name">{c.collection} ({docs.length}{!filterDate && typeof c.count === 'number' ? ` / ${c.count}` : ''})</div>
-                    <div className="coll-actions">
-                      <button className="btn-secondary btn" onClick={() => navigator.clipboard.writeText(JSON.stringify(docs, null, 2))}>Copy All JSON</button>
-                    </div>
+                    <div className="coll-actions" />
                   </div>
                   <div className="cards-grid">
                     {docs.map((row, idx) => {
