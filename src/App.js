@@ -170,7 +170,7 @@ function getColumnFilterKey(collection, column) {
 function getSafeSheetName(name = 'Sheet') {
   return (name || 'Sheet')
     .toString()
-    .replace(/[][\\/?*:]/g, '_')
+    .replace(/[\[\]\\/?:*]/g, '_')
     .slice(0, 31)
     || 'Sheet';
 }
