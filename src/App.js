@@ -170,7 +170,7 @@ function getColumnFilterKey(collection, column) {
 function getSafeSheetName(name = 'Sheet') {
   return (name || 'Sheet')
     .toString()
-    .replace(/[\\/?*\[\]:]/g, '_')
+    .replace(/[][\\/?*:]/g, '_')
     .slice(0, 31)
     || 'Sheet';
 }
@@ -208,6 +208,32 @@ function formatFieldValue(val, { truncate = true } = {}) {
     return entries.map(([key, value]) => `${key}: ${value}`).join(', ');
   }
   return String(val);
+}
+
+function getRowFields(doc) {
+  if (!doc || typeof doc !== 'object') return {};
+  if (doc.data && typeof doc.data === 'object') {
+    return doc.data;
+  }
+  return doc;
+}
+
+function getFilteredColumns(docs) {
+  const excluded = new Set(['_id','__v','createdAt','updatedAt','submittedAt','timestamps','metadata','ip','ipAddress','userAgent','id','submitted_at']);
+  const seen = new Set();
+  const ordered = [];
+  for (const d of docs) {
+    const fields = getRowFields(d);
+    for (const k of Object.keys(fields)) {
+      if (excluded.has(k)) continue;
+      if (HIDDEN_FIELD_SET.has(normalizeFieldName(k))) continue;
+      if (!seen.has(k)) {
+        seen.add(k);
+        ordered.push(k);
+      }
+    }
+  }
+  return ordered; // preserve first-seen order from DB
 }
 
 const COLUMN_FILTER_ALL = '__all__';
@@ -403,32 +429,6 @@ function App() {
     const timestamp = new Date().toISOString().replace(/[:T]/g, '-').split('.')[0];
     XLSX.writeFile(workbook, `TecnoTribe-dashboard-${timestamp}.xlsx`);
   }, [hasExportableData, tableCollections]);
-
-  function getRowFields(doc) {
-    if (!doc || typeof doc !== 'object') return {};
-    if (doc.data && typeof doc.data === 'object') {
-      return doc.data;
-    }
-    return doc;
-  }
-
-  function getFilteredColumns(docs) {
-    const excluded = new Set(['_id','__v','createdAt','updatedAt','submittedAt','timestamps','metadata','ip','ipAddress','userAgent','id','submitted_at']);
-    const seen = new Set();
-    const ordered = [];
-    for (const d of docs) {
-      const fields = getRowFields(d);
-      for (const k of Object.keys(fields)) {
-        if (excluded.has(k)) continue;
-        if (HIDDEN_FIELD_SET.has(normalizeFieldName(k))) continue;
-        if (!seen.has(k)) {
-          seen.add(k);
-          ordered.push(k);
-        }
-      }
-    }
-    return ordered; // preserve first-seen order from DB
-  }
 
   function handleLogin(e) {
     e.preventDefault();
