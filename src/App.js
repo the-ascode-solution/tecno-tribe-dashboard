@@ -3,6 +3,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { fetchDashboardData } from './api';
 import * as XLSX from 'xlsx';
 
+const LOGIN_ENDPOINTS = [
+  '/.netlify/functions/login',
+  '/api/login',
+  'http://localhost:5000/api/login',
+];
+
 const HIDDEN_FIELDS = [
   'Ambassador',
   'Ambassador Benefits',
@@ -19,33 +25,6 @@ const HIDDEN_FIELDS = [
 ];
 
 const HIDDEN_FIELD_SET = new Set(HIDDEN_FIELDS.map(normalizeFieldName));
-
-const FALLBACK_ADMIN_USERS = [
-  { email: 'admin@tecnotribe.site', password: '!password$123*' },
-  { email: 'hussainfarhad509@gmail.com', password: 'Mfarhad@0222_0111' },
-  { email: 'dev@tecnotribe.site', password: 'password123' },
-];
-
-function parseEnvAdminUsers() {
-  const raw = process.env.REACT_APP_ADMIN_USERS;
-  if (!raw) return null;
-
-  try {
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return null;
-
-    const sanitized = parsed.filter(
-      (entry) => entry && typeof entry.email === 'string' && typeof entry.password === 'string'
-    );
-
-    return sanitized.length ? sanitized : null;
-  } catch (error) {
-    console.warn('Invalid REACT_APP_ADMIN_USERS value. Falling back to defaults.', error);
-    return null;
-  }
-}
-
-const ADMIN_USERS = parseEnvAdminUsers() || FALLBACK_ADMIN_USERS;
 
 const DATE_FIELD_NAMES = [
   'createdAt','created_at',
@@ -176,6 +155,37 @@ function getSafeSheetName(name = 'Sheet') {
   return sanitized.slice(0, 31) || 'Sheet';
 }
 
+async function authenticateAdmin({ email, password }) {
+  if (!email || !password) {
+    throw new Error('Email and password are required');
+  }
+
+  const body = JSON.stringify({ email, password });
+  let lastError = null;
+
+  for (const url of LOGIN_ENDPOINTS) {
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+      });
+
+      const payload = await res.json().catch(() => ({}));
+      if (res.ok && payload?.ok) {
+        return payload;
+      }
+
+      const message = payload?.error || `Login failed (${res.status})`;
+      throw new Error(message);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError || new Error('Unable to authenticate. Please try again.');
+}
+
 function formatFieldValue(val, { truncate = true } = {}) {
   if (val === null || val === undefined) return '-';
   if (typeof val === 'boolean') return val ? 'Yes' : 'No';
@@ -245,6 +255,7 @@ function App() {
   const [password, setPassword] = useState('');
   const [isAuthed, setIsAuthed] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [authenticating, setAuthenticating] = useState(false);
   const [error, setError] = useState('');
   const [data, setData] = useState(null);
   const [query, setQuery] = useState('');
@@ -431,16 +442,20 @@ function App() {
     XLSX.writeFile(workbook, `TecnoTribe-dashboard-${timestamp}.xlsx`);
   }, [hasExportableData, tableCollections]);
 
-  function handleLogin(e) {
+  async function handleLogin(e) {
     e.preventDefault();
     setError('');
     const normalizedEmail = email.trim().toLowerCase();
-    const isValid = ADMIN_USERS.some((user) => user.email.toLowerCase() === normalizedEmail && user.password === password);
-    if (isValid) {
+
+    try {
+      setAuthenticating(true);
+      await authenticateAdmin({ email: normalizedEmail, password });
       setIsAuthed(true);
       sessionStorage.setItem('isAuthed', 'true');
-    } else {
-      setError('Invalid credentials');
+    } catch (loginError) {
+      setError(loginError.message || 'Invalid credentials');
+    } finally {
+      setAuthenticating(false);
     }
   }
 
@@ -566,7 +581,9 @@ function App() {
             {error && <div className="error">{error}</div>}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
               <div className="hint">Use the provided admin credentials</div>
-              <button type="submit" className="btn">Sign In</button>
+              <button type="submit" className="btn" disabled={authenticating}>
+                {authenticating ? 'Signing in…' : 'Sign In'}
+              </button>
             </div>
           </form>
         </div>
