@@ -168,11 +168,12 @@ function getColumnFilterKey(collection, column) {
 }
 
 function getSafeSheetName(name = 'Sheet') {
-  return (name || 'Sheet')
-    .toString()
-    .replace(/[\[\]\\/?:*]/g, '_')
-    .slice(0, 31)
-    || 'Sheet';
+  const raw = (name || 'Sheet').toString();
+  const sanitized = raw
+    .replace(/[\\/?*:]/g, '_')
+    .replace(/\[/g, '_')
+    .replace(/\]/g, '_');
+  return sanitized.slice(0, 31) || 'Sheet';
 }
 
 function formatFieldValue(val, { truncate = true } = {}) {
