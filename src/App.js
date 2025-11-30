@@ -713,9 +713,9 @@ function App() {
                   <div className="coll-header" style={{ marginBottom: 8 }}>
                     <div className="coll-name">{c.collection} ({visibleDocs.length}{!filterDate && typeof c.count === 'number' ? ` / ${c.count}` : ''})</div>
                     <div className="coll-actions">
-                      <button className="btn" onClick={handleExportVisible} disabled={!hasExportableData}>
+                      {/* <button className="btn" onClick={handleExportVisible} disabled={!hasExportableData}>
                         Export visible (.xlsx)
-                      </button>
+                      </button> */}
                     </div>
                   </div>
                   <div className="table-wrap">
