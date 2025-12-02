@@ -46,12 +46,6 @@ const CrescentIcon = ({ size = 18 }) => (
   </svg>
 );
 
-const LOGIN_ENDPOINTS = [
-  '/.netlify/functions/login',
-  '/api/login',
-  'http://localhost:5000/api/login',
-];
-
 const HIDDEN_FIELDS = [
   'Ambassador',
   'Ambassador Benefits',
