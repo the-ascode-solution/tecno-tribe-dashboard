@@ -46,6 +46,12 @@ const CrescentIcon = ({ size = 18 }) => (
   </svg>
 );
 
+const LOGIN_ENDPOINTS = [
+  '/.netlify/functions/login',
+  '/api/login',
+  'http://localhost:5000/api/login',
+];
+
 const HIDDEN_FIELDS = [
   'Ambassador',
   'Ambassador Benefits',
@@ -305,7 +311,7 @@ async function authenticateAdmin({ email, password }) {
   const body = JSON.stringify({ email, password });
   let lastError = null;
 
-  for (const url of ['/api/login']) {
+  for (const url of LOGIN_ENDPOINTS) {
     try {
       const res = await fetch(url, {
         method: 'POST',
