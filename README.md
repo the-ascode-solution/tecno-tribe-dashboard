@@ -1,100 +1,116 @@
-# Getting Started with Create React App
+# Tecno Survey Dashboard
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+A React + Express dashboard tailored for TECNO survey data. The UI has been redesigned to match a crisp white & electric-blue palette, offers responsive analytics views, and exposes administrative controls for reviewing and exporting survey submissions backed by PostgreSQL.
 
-## Available Scripts
+![Dashboard brand](./docs/brand.png)
 
-In the project directory, you can run:
+## Features
 
-### `npm start`
+- **Secure admin access** – Simple session-gated login with single-session enforcement.
+- **Collection browser** – Paginated table previews of every public schema table returned by PostgreSQL.
+- **Analytics hub**
+  - Daily submission trends table sized for quick scanning.
+  - Gender-distribution table with coordinated pie chart legend.
+  - Inline hints when data fields are missing.
+- **Theme toggle** – Light (sun) vs. dark (crescent) modes with persisted preference.
+- **CSV/XLSX export** – One-click export of the current collections via `xlsx`.
+- **Responsive layout** – Grid-based cards adapt to desktop and tablet breakpoints.
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+## Tech stack
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+| Layer | Choices |
+| --- | --- |
+| Frontend | React 19 (CRA), modern CSS, SVG icons |
+| Backend | Express 5, `pg` connection pool, CORS-enabled REST endpoints |
+| Database | PostgreSQL (Neon-hosted by default) |
+| Tooling | dotenv, concurrently, XLSX export helpers |
 
-### `npm test`
+## Project structure
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
-
-### `npm run build`
-
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
-
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
-
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
-
-### `npm run eject`
-
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
-
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
-
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
-
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
-
-## Learn More
-
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
-
-### Code Splitting
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
-
-## Codemap: Authentication (Login) Flow
-
-```mermaid
-flowchart TD
-    A[User opens App] --> B{sessionStorage.isAuthed === 'true'?}
-    B -- yes --> C[isAuthed state set true]
-    B -- no --> D[Render login form]
-    D --> E[handleLogin submits]
-    E --> F{Email & password match ADMIN_* constants?}
-    F -- yes --> G[setIsAuthed(true) + sessionStorage flag]
-    G --> H[useEffect triggers fetchDashboardData]
-    F -- no --> I[setError('Invalid credentials')]
-    H --> J[/api/data backend]
-    J --> K[Collections + status returned]
-    K --> L[Dashboard rendered]
-    L --> M[handleLogout clears state & sessionStorage]
-    M --> D
+```
+e:\tecno dashboard
+├── src/            # React app (App.js houses most logic)
+├── public/
+├── server.js       # Express API + Postgres connector
+├── package.json
+├── .env.example    # (create this locally from README instructions)
+└── README.md
 ```
 
-**Key pieces**
+## Getting started
 
-1. **Constants & state** – `ADMIN_EMAIL`, `ADMIN_PASSWORD`, and controlled inputs (`email`, `password`) live in `src/App.js`.
-2. **Session bootstrap** – On mount, `useEffect` hydrates `isAuthed` from `sessionStorage` to skip repeat logins.
-3. **Login handler** – `handleLogin` compares credentials, toggles `isAuthed`, persists the flag, or surfaces errors.
-4. **Data gating** – Once `isAuthed` is true, the data-fetch effect runs `fetchDashboardData` (`src/api.js`), which first hits `/api/data` via CRA proxy, then falls back to `http://localhost:5000/api/data`.
-5. **Backend** – `server.js` serves `/api/data`, connecting to Postgres (if `DATABASE_URL` is provided) and returning table previews along with status metadata consumed by the UI.
-6. **Logout loop** – `handleLogout` resets credentials, clears `sessionStorage`, and routes users back to the login form, closing the loop shown above.
+1. **Install prerequisites**
+   - Node.js 20+
+   - npm 10+
+   - Access to a PostgreSQL database containing the survey tables.
+2. **Install dependencies**
+   ```bash
+   npm install
+   ```
+3. **Configure environment** – Create an `.env` file at the repo root:
+   ```ini
+   # Required
+   DATABASE_URL=postgresql://<user>:<password>@<host>/<db>?sslmode=require
+   ADMIN_EMAIL=admin@tecnotribe.site
+   ADMIN_PASSWORD=!password$123*
 
-Use this codemap as the source of truth whenever modifying auth logic or extending it with server-side validation.
+   # Optional overrides
+   SERVER_PORT=5000
+   SESSION_TTL_MS=3600000
+   ```
+   > The React client references the Express server through CRA's proxy, so no `REACT_APP_*` variables are needed today.
+4. **Run the stack**
+   - Start only the frontend: `npm start`
+   - Start only the API: `npm run server`
+   - Run both concurrently (recommended during development):
+     ```bash
+     npm run dev
+     ```
+5. **Build for production**
+   ```bash
+   npm run build
+   ```
+
+## UI customization notes
+
+- **Branding** – Top-left wordmark reads `TECNO SURVEY Dashboard`. Update `src/App.js` if branding changes again.
+- **Color palette** – CSS variables live in `src/App.css`; light mode is constrained to white + `#0363F9`, while dark mode leans on deep navy backgrounds.
+- **Gender visualization** – Colors map to specific labels (blue = male, pink = female, green = prefer not to say). Additional labels fall back to the rotating palette defined in `PIE_COLORS`.
+
+## Backend endpoints
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `GET /api/health` | Simple readiness probe. |
+| `POST /api/login` | Validates credentials, issues temporary session token (single active session enforced). |
+| `POST /api/logout` | Clears the current session token. |
+| `POST /api/session/check` | Verifies that a token is still valid. |
+| `GET /api/data` | Lists every `public` table, its row count, and returns full table contents as JSON aggregates. |
+
+## Development tips
+
+1. **Data volume** – `/api/data` currently returns every row in each table. Consider adding pagination or limits before shipping to production datasets.
+2. **Session rules** – Only one client can be logged in at a time. Adjust this logic in `server.js` if multi-session support is required.
+3. **Exports** – The file name pattern `TecnoSurvey-dashboard-<timestamp>.xlsx` is controlled inside `src/App.js` if you want to refine it.
+4. **Styling** – The dashboard relies solely on CSS (no Tailwind). Keep new styles consistent with the variable-driven system in `App.css`.
+
+## Testing
+
+The project retains CRA's default testing setup. To execute the suite:
+
+```bash
+npm test
+```
+
+Writing component-level tests with `@testing-library/react` is encouraged for future PRs (table rendering, theme toggle persistence, etc.).
+
+## Deployment
+
+1. Build the frontend (`npm run build`).
+2. Host the static assets (Netlify, Vercel, S3/CloudFront, etc.).
+3. Deploy `server.js` to any Node-compatible environment (Render, Fly.io, traditional VPS). Ensure the same `.env` is provided and that CORS origins include your frontend host.
+4. Update any DNS/SSL records as needed.
+
+## License
+
+Internal TECNO tooling – contact the project owners before sharing outside the organization.

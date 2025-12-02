@@ -652,7 +652,7 @@ function App() {
       <div className="centered">
         <div className="card auth-card fade-in">
           <div className="brand" style={{ marginBottom: 8 }}>
-            <div className="brand-badge" /> TecnoTribe
+            <div className="brand-badge" /> Tecno Survey
           </div>
           <h1 className="title">Welcome back</h1>
           <div className="subtitle">Sign in to view your dashboard</div>
@@ -745,7 +745,7 @@ function App() {
     <div>
       <div className="topbar">
         <div className="container topbar-inner">
-          <div className="brand"><div className="brand-badge" /> TECNO TRIBE Dashboard</div>
+          <div className="brand"><div className="brand-badge" /> TECNO SURVEY Dashboard</div>
           <div className="tabs">
             <button className={`tab ${activeTab === 'surveys' ? 'tab-active' : ''}`} onClick={() => setActiveTab('surveys')}>Surveys</button>
             <button className={`tab ${activeTab === 'analytics' ? 'tab-active' : ''}`} onClick={() => setActiveTab('analytics')}>Analytics</button>
