@@ -241,6 +241,9 @@ body.theme-dark {
   margin-top: 16px;
   transition: background 0.35s ease, border-color 0.35s ease, box-shadow 0.35s ease;
 }
+.table-wrap.mini {
+  max-height: 420px;
+}
 table { 
   width: 100%; 
   border-collapse: collapse; 
@@ -279,6 +282,107 @@ tbody tr:nth-child(even) {
 }
 tbody tr:nth-child(odd) { 
   background: rgba(255, 255, 255, 0.8); 
+}
+
+.analytics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.analytics-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.analytics-table th,
+.analytics-table td {
+  font-size: 13px;
+  padding: 12px 14px;
+}
+
+.analytics-table th {
+  letter-spacing: 0.4px;
+}
+
+.analytics-table td {
+  color: var(--text);
+}
+
+.gender-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.gender-table {
+  flex: 1;
+}
+
+.gender-chart {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+
+.gender-chart svg {
+  width: 160px;
+  height: 160px;
+}
+
+.chart-value {
+  font-size: 18px;
+  font-weight: 700;
+  fill: var(--text);
+}
+
+.chart-label {
+  font-size: 10px;
+  letter-spacing: 1.2px;
+  fill: var(--muted);
+}
+
+.gender-legend {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.legend-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+}
+
+.legend-row .dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  margin-right: 8px;
+  flex-shrink: 0;
+}
+
+.legend-label {
+  flex: 1;
+  margin-left: 6px;
+}
+
+.legend-row strong {
+  color: var(--text);
+}
+
+@media (max-width: 720px) {
+  .analytics-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* Dark-mode refinements */

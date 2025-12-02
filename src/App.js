@@ -3,6 +3,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { fetchDashboardData } from './api';
 import * as XLSX from 'xlsx';
 
+const PIE_COLORS = ['#0363f9', '#e47759ff', '#3d9a46ff', '#bed0ff'];
+
 const SunIcon = ({ size = 18 }) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
@@ -67,6 +69,7 @@ const HIDDEN_FIELDS = [
 ];
 
 const HIDDEN_FIELD_SET = new Set(HIDDEN_FIELDS.map(normalizeFieldName));
+const GENDER_FIELD_KEYS = new Set(['gender', 'sex']);
 
 const DATE_FIELD_NAMES = [
   'createdAt','created_at',
@@ -146,8 +149,41 @@ function normalizeFieldName(value) {
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, ' ')
-    .replace(/\s+/g, ' ') // collapse whitespace
+    .replace(/\s+/g, ' ')
     .trim();
+}
+
+function formatGenderLabel(value) {
+  if (value === null || value === undefined) return 'Unknown';
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return 'Unknown';
+    return trimmed
+      .toLowerCase()
+      .replace(/(^|\s)([a-z])/g, (_, space, char) => `${space}${char.toUpperCase()}`)
+      .replace(/\s+/g, ' ');
+  }
+  return String(value);
+}
+
+function polarToCartesian(cx, cy, r, angleInDegrees) {
+  const radians = ((angleInDegrees - 90) * Math.PI) / 180;
+  return {
+    x: cx + r * Math.cos(radians),
+    y: cy + r * Math.sin(radians),
+  };
+}
+
+function describeArc(cx, cy, r, startAngle, endAngle) {
+  const start = polarToCartesian(cx, cy, r, endAngle);
+  const end = polarToCartesian(cx, cy, r, startAngle);
+  const largeArcFlag = endAngle - startAngle <= 180 ? '0' : '1';
+  return [
+    'M', start.x, start.y,
+    'A', r, r, 0, largeArcFlag, 0, end.x, end.y,
+    'L', cx, cy,
+    'Z',
+  ].join(' ');
 }
 
 function formatDateLabel(dateString) {
@@ -471,6 +507,48 @@ function App() {
       .map(([date, count]) => ({ date, count }));
   }, [baseCollections]);
 
+  const genderStats = useMemo(() => {
+    const counts = new Map();
+    let total = 0;
+    baseCollections.forEach((c) => {
+      (c.docs || []).forEach((doc) => {
+        const fields = getRowFields(doc);
+        Object.entries(fields).forEach(([key, value]) => {
+          const normalized = normalizeFieldName(key);
+          if (!GENDER_FIELD_KEYS.has(normalized)) return;
+          const label = formatGenderLabel(value);
+          counts.set(label, (counts.get(label) || 0) + 1);
+          total += 1;
+        });
+      });
+    });
+    const rows = Array.from(counts.entries())
+      .map(([label, count]) => ({
+        label,
+        count,
+        percent: total ? (count / total) * 100 : 0,
+      }))
+      .sort((a, b) => b.count - a.count);
+    return { total, rows };
+  }, [baseCollections]);
+
+  const genderPieSlices = useMemo(() => {
+    if (!genderStats.total) return [];
+    let startAngle = 0;
+    return genderStats.rows.map((row, index) => {
+      const angle = (row.percent / 100) * 360;
+      const endAngle = startAngle + angle;
+      const path = describeArc(60, 60, 58, startAngle, endAngle);
+      const slice = {
+        ...row,
+        path,
+        color: PIE_COLORS[index % PIE_COLORS.length],
+      };
+      startAngle = endAngle;
+      return slice;
+    });
+  }, [genderStats]);
+
   const sortSelectValue = filterDate ? `date:${filterDate}` : sortOption;
 
   const handleManualRefresh = useCallback(() => {
@@ -757,36 +835,92 @@ function App() {
         )}
 
         {activeTab === 'analytics' && (
-          <div className="card fade-in" style={{ marginBottom: 16 }}>
-            <div className="coll-header" style={{ marginBottom: 8 }}>
-              <div className="coll-name">Daily form submissions</div>
-              <div className="coll-actions">
-                <span className="label">Tracking {dailyCounts.length} day{dailyCounts.length === 1 ? '' : 's'}</span>
+          <div className="analytics-grid fade-in">
+            <div className="card analytics-card submissions-card">
+              <div className="coll-header" style={{ marginBottom: 8 }}>
+                <div className="coll-name">Daily form submissions</div>
+                <div className="coll-actions">
+                  <span className="label">Tracking {dailyCounts.length} day{dailyCounts.length === 1 ? '' : 's'}</span>
+                </div>
+              </div>
+              <div className="table-wrap mini">
+                <table className="analytics-table">
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Forms</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dailyCounts.length === 0 ? (
+                      <tr>
+                        <td colSpan={2}>No submissions found.</td>
+                      </tr>
+                    ) : (
+                      dailyCounts.map((row) => (
+                        <tr key={row.date}>
+                          <td>{new Date(row.date).toLocaleDateString()}</td>
+                          <td>{row.count}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Forms submitted</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {dailyCounts.length === 0 ? (
-                    <tr>
-                      <td colSpan={2}>No submissions found.</td>
-                    </tr>
-                  ) : (
-                    dailyCounts.map((row) => (
-                      <tr key={row.date}>
-                        <td>{new Date(row.date).toLocaleDateString()}</td>
-                        <td>{row.count}</td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+
+            <div className="card analytics-card">
+              <div className="coll-header" style={{ marginBottom: 8 }}>
+                <div className="coll-name">Gender distribution</div>
+                <div className="coll-actions">
+                  <span className="label">{genderStats.total} responses</span>
+                </div>
+              </div>
+              {genderStats.total === 0 ? (
+                <div className="hint">No gender field found in current data.</div>
+              ) : (
+                <div className="gender-grid">
+                  <div className="table-wrap mini gender-table">
+                    <table className="analytics-table">
+                      <thead>
+                        <tr>
+                          <th>Gender</th>
+                          <th>Responses</th>
+                          <th>%</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {genderStats.rows.map((row) => (
+                          <tr key={row.label}>
+                            <td>{row.label}</td>
+                            <td>{row.count}</td>
+                            <td>{row.percent.toFixed(1)}%</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="gender-chart">
+                    <svg viewBox="0 0 120 120" aria-hidden="true">
+                      <circle cx="60" cy="60" r="50" fill="#eef4ff" />
+                      {genderPieSlices.map((slice) => (
+                        <path key={slice.label} d={slice.path} fill={slice.color} />
+                      ))}
+                      <circle cx="60" cy="60" r="30" fill="#ffffff" />
+                      <text x="60" y="66" textAnchor="middle" className="chart-label">GENDER</text>
+                    </svg>
+                    <div className="gender-legend">
+                      {genderPieSlices.map((slice) => (
+                        <div key={slice.label} className="legend-row">
+                          <span className="dot" style={{ background: slice.color }} />
+                          <span className="legend-label">{slice.label}</span>
+                          <strong>{slice.percent.toFixed(1)}%</strong>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
