@@ -667,7 +667,7 @@ function App() {
     <div>
       <div className="topbar">
         <div className="container topbar-inner">
-          <div className="brand"><div className="brand-badge" /> TecnoTribe Dashboard</div>
+          <div className="brand"><div className="brand-badge" /> TECNO TRIBE Dashboard</div>
           <div className="tabs">
             <button className={`tab ${activeTab === 'surveys' ? 'tab-active' : ''}`} onClick={() => setActiveTab('surveys')}>Surveys</button>
             <button className={`tab ${activeTab === 'analytics' ? 'tab-active' : ''}`} onClick={() => setActiveTab('analytics')}>Analytics</button>
@@ -718,9 +718,6 @@ function App() {
                   <span>Dark Mode</span>
                 </>
               )}
-            </button>
-            <button className="btn-secondary btn" onClick={handleManualRefresh} disabled={loading} title="Refresh dashboard">
-              {loading ? 'Refreshing…' : 'Refresh'}
             </button>
             <button className="btn-secondary btn" onClick={handleLogout}>Logout</button>
           </div>
