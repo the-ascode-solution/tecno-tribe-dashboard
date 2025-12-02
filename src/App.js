@@ -3,6 +3,48 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { fetchDashboardData } from './api';
 import * as XLSX from 'xlsx';
 
+const SunIcon = ({ size = 18 }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    width={size}
+    height={size}
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.8"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <circle cx="12" cy="12" r="5" />
+    <line x1="12" y1="1" x2="12" y2="3" />
+    <line x1="12" y1="21" x2="12" y2="23" />
+    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+    <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+    <line x1="1" y1="12" x2="3" y2="12" />
+    <line x1="21" y1="12" x2="23" y2="12" />
+    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+    <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+  </svg>
+);
+
+const CrescentIcon = ({ size = 18 }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    width={size}
+    height={size}
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.8"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <path d="M21 14.5A8.38 8.38 0 0 1 9.5 3 7 7 0 1 0 21 14.5z" />
+  </svg>
+);
+
 const LOGIN_ENDPOINTS = [
   '/.netlify/functions/login',
   '/api/login',
@@ -266,6 +308,36 @@ function App() {
   const [sortOption, setSortOption] = useState('name-asc');
   const [filterDate, setFilterDate] = useState(null);
   const [columnFilters, setColumnFilters] = useState({});
+  const [theme, setTheme] = useState('light');
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const storedTheme = window.localStorage.getItem('dashboard-theme');
+    if (storedTheme === 'dark' || storedTheme === 'light') {
+      setTheme(storedTheme);
+      return;
+    }
+    const prefersDark = window.matchMedia?.('(prefers-color-scheme: dark)').matches;
+    if (prefersDark) {
+      setTheme('dark');
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const body = document.body;
+    body.classList.remove('theme-light', 'theme-dark');
+    body.classList.add(`theme-${theme}`);
+    try {
+      window.localStorage.setItem('dashboard-theme', theme);
+    } catch (_) {
+      /* no-op */
+    }
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme((prev) => (prev === 'light' ? 'dark' : 'light'));
+  };
 
   useEffect(() => {
     const stored = sessionStorage.getItem('isAuthed');
@@ -629,6 +701,24 @@ function App() {
               <button className={viewMode === 'cards' ? 'active' : ''} onClick={() => setViewMode('cards')}>Cards</button>
               <button className={viewMode === 'table' ? 'active' : ''} onClick={() => setViewMode('table')}>Table</button>
             </div>
+            <button
+              className="btn-secondary btn theme-toggle"
+              onClick={toggleTheme}
+              title={`Switch to ${theme === 'light' ? 'dark (crescent)' : 'light (sun)'} mode`}
+              aria-label={`Switch to ${theme === 'light' ? 'dark (crescent)' : 'light (sun)'} mode`}
+            >
+              {theme === 'light' ? (
+                <>
+                  <SunIcon />
+                  <span>Light Mode</span>
+                </>
+              ) : (
+                <>
+                  <CrescentIcon />
+                  <span>Dark Mode</span>
+                </>
+              )}
+            </button>
             <button className="btn-secondary btn" onClick={handleManualRefresh} disabled={loading} title="Refresh dashboard">
               {loading ? 'Refreshing…' : 'Refresh'}
             </button>
