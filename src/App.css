@@ -299,7 +299,8 @@ tbody tr:nth-child(odd) {
 .analytics-table th,
 .analytics-table td {
   font-size: 13px;
-  padding: 12px 14px;
+  padding: 8px 12px;
+  text-align: left;
 }
 
 .analytics-table th {

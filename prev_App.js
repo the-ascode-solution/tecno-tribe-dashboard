@@ -1,8 +1,9 @@
-import './App.css';
+﻿import './App.css';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { fetchDashboardData } from './api';
+import * as XLSX from 'xlsx';
 
-const PIE_COLORS = ['#0363f9', '#e47759', '#d7ff8cff', '#3d9a46'];
+const PIE_COLORS = ['#0363f9', '#e47759ff', '#3d9a46ff', '#bed0ff'];
 
 const SunIcon = ({ size = 18 }) => (
   <svg
@@ -80,23 +81,6 @@ const DATE_FIELD_NAMES = [
   'time','Time',
 ];
 
-function normalizeFieldName(value) {
-  return (value ?? '')
-    .toString()
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function normalizeFilterValue(value) {
-  if (value === null || value === undefined) return ''; 
-  if (value === true) return 'true';
-  if (value === false) return 'false';
-  return value.toString().trim().toLowerCase();
-}
-
 function parseDateValue(value) {
   if (!value) return null;
   if (value instanceof Date) {
@@ -159,102 +143,14 @@ function getDocDate(doc) {
   return d.toISOString().split('T')[0];
 }
 
-function getRowFields(doc) {
-  if (!doc) return {};
-  if (doc.fields && typeof doc.fields === 'object') return doc.fields;
-  if (doc.data && typeof doc.data === 'object') return doc.data;
-  return doc;
-}
-
-function getColumnFilterKey(collection, column) {
-  return `${collection}::${column}`;
-}
-
-function getFilteredColumns(docs) {
-  const seen = new Set();
-  docs.forEach((doc) => {
-    const fields = getRowFields(doc);
-    Object.keys(fields).forEach((key) => {
-      if (key.startsWith('_')) return;
-      if (HIDDEN_FIELD_SET.has(normalizeFieldName(key))) return;
-      seen.add(key);
-    });
-  });
-  return Array.from(seen);
-}
-
-function formatFieldValue(value, { truncate = true } = {}) {
-  if (value === null || value === undefined) return '-';
-  if (typeof value === 'string') {
-    const trimmed = value.trim();
-    if (!trimmed) return '(empty)';
-    if (!truncate || trimmed.length <= 60) return trimmed;
-    return `${trimmed.slice(0, 60)}…`;
-  }
-  if (typeof value === 'number' || typeof value === 'boolean') {
-    return String(value);
-  }
-  if (Array.isArray(value)) {
-    if (value.length === 0) return '[]';
-    if (value.length === 1) return formatFieldValue(value[0], { truncate });
-    return `${value.length} items`;
-  }
-  if (typeof value === 'object') {
-    const keys = Object.keys(value);
-    if (keys.length === 0) return '{}';
-    return keys.map((k) => `${k}: ${formatFieldValue(value[k], { truncate: false })}`).join(', ');
-  }
-  return String(value);
-}
-
-function formatNiceLabel(value) {
-  return (value || '')
+function normalizeFieldName(value) {
+  return (value ?? '')
     .toString()
-    .replace(/([A-Z])/g, ' $1')
-    .replace(/[_-]+/g, ' ')
-    .replace(/\s+/g, ' ')
     .trim()
-    .replace(/(^|\s)([a-z])/g, (_, space, char) => `${space}${char.toUpperCase()}`);
-}
-
-function prepareObjectEntries(value) {
-  const entries = Object.entries(value || {});
-  const enriched = entries.map(([key, raw]) => {
-    const numeric = typeof raw === 'number' ? raw : Number(raw);
-    return {
-      key,
-      value: raw,
-      sortableValue: Number.isFinite(numeric) ? numeric : null,
-    };
-  });
-  const hasNumeric = enriched.some((entry) => entry.sortableValue !== null);
-  if (hasNumeric) {
-    enriched.sort((a, b) => {
-      const av = a.sortableValue ?? Number.POSITIVE_INFINITY;
-      const bv = b.sortableValue ?? Number.POSITIVE_INFINITY;
-      return av - bv;
-    });
-  } else {
-    enriched.sort((a, b) => a.key.localeCompare(b.key));
-  }
-  return enriched;
-}
-
-function renderCellValue(value) {
-  if (value && typeof value === 'object' && !Array.isArray(value)) {
-    const entries = prepareObjectEntries(value);
-    return (
-      <div className="cell-row">
-        {entries.map((entry) => (
-          <div key={entry.key} className="chip-inline">
-            <span className="chip-label">{formatNiceLabel(entry.key)}</span>
-            <span className="chip-value">{formatFieldValue(entry.value, { truncate: false })}</span>
-          </div>
-        ))}
-      </div>
-    );
-  }
-  return formatFieldValue(value);
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function formatGenderLabel(value) {
@@ -303,6 +199,40 @@ function formatDateLabel(dateString) {
   }
 }
 
+function normalizeFilterValue(value) {
+  if (value === null || value === undefined) return '(blank)';
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed.length === 0 ? '(empty)' : trimmed;
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+  if (Array.isArray(value)) {
+    if (value.length === 0) return '[]';
+    return value.map((v) => normalizeFilterValue(v)).join(', ');
+  }
+  if (typeof value === 'object') {
+    const entries = Object.entries(value);
+    if (entries.length === 0) return '{}';
+    return entries.map(([k, v]) => `${k}: ${normalizeFilterValue(v)}`).join(', ');
+  }
+  return String(value);
+}
+
+function getColumnFilterKey(collection, column) {
+  return `${collection}__${column}`;
+}
+
+function getSafeSheetName(name = 'Sheet') {
+  const raw = (name || 'Sheet').toString();
+  const sanitized = raw
+    .replace(/[\\/?*:]/g, '_')
+    .replace(/\[/g, '_')
+    .replace(/\]/g, '_');
+  return sanitized.slice(0, 31) || 'Sheet';
+}
+
 async function authenticateAdmin({ email, password }) {
   if (!email || !password) {
     throw new Error('Email and password are required');
@@ -311,7 +241,7 @@ async function authenticateAdmin({ email, password }) {
   const body = JSON.stringify({ email, password });
   let lastError = null;
 
-  for (const url of ['/api/login']) {
+  for (const url of LOGIN_ENDPOINTS) {
     try {
       const res = await fetch(url, {
         method: 'POST',
@@ -332,6 +262,67 @@ async function authenticateAdmin({ email, password }) {
   }
 
   throw lastError || new Error('Unable to authenticate. Please try again.');
+}
+
+function formatFieldValue(val, { truncate = true } = {}) {
+  if (val === null || val === undefined) return '-';
+  if (typeof val === 'boolean') return val ? 'Yes' : 'No';
+  if (typeof val === 'string') {
+    const trimmed = val.trim();
+    if (trimmed.length === 0) return '(empty)';
+    if (truncate && trimmed.length > 50) {
+      return `${trimmed.substring(0, 47)}...`;
+    }
+    return trimmed;
+  }
+  if (Array.isArray(val)) {
+    if (val.length === 0) return '[]';
+    if (val.length === 1) return formatFieldValue(val[0], { truncate });
+    return val.map((item) => formatFieldValue(item, { truncate })).join(', ');
+  }
+  if (typeof val === 'object') {
+    const keys = Object.keys(val);
+    if (keys.length === 0) return '{}';
+    const isRanking = keys.some((key) => !Number.isNaN(parseFloat(val[key])));
+    const entries = isRanking
+      ? Object.entries(val).sort(([, a], [, b]) => {
+          const numA = parseFloat(a);
+          const numB = parseFloat(b);
+          if (Number.isNaN(numA) && Number.isNaN(numB)) return 0;
+          if (Number.isNaN(numA)) return 1;
+          if (Number.isNaN(numB)) return -1;
+          return numA - numB;
+        })
+      : Object.entries(val);
+    return entries.map(([key, value]) => `${key}: ${value}`).join(', ');
+  }
+  return String(val);
+}
+
+function getRowFields(doc) {
+  if (!doc || typeof doc !== 'object') return {};
+  if (doc.data && typeof doc.data === 'object') {
+    return doc.data;
+  }
+  return doc;
+}
+
+function getFilteredColumns(docs) {
+  const excluded = new Set(['_id','__v','createdAt','updatedAt','submittedAt','timestamps','metadata','ip','ipAddress','userAgent','id','submitted_at']);
+  const seen = new Set();
+  const ordered = [];
+  for (const d of docs) {
+    const fields = getRowFields(d);
+    for (const k of Object.keys(fields)) {
+      if (excluded.has(k)) continue;
+      if (HIDDEN_FIELD_SET.has(normalizeFieldName(k))) continue;
+      if (!seen.has(k)) {
+        seen.add(k);
+        ordered.push(k);
+      }
+    }
+  }
+  return ordered; // preserve first-seen order from DB
 }
 
 const COLUMN_FILTER_ALL = '__all__';
@@ -493,6 +484,11 @@ function App() {
     });
   }, [collections, columnFilters]);
 
+  const hasExportableData = useMemo(
+    () => tableCollections.some((c) => c.visibleDocs.length > 0),
+    [tableCollections]
+  );
+
   const totalDocs = useMemo(() => {
     return collections.reduce((acc, c) => acc + (c.displayDocs?.length || 0), 0);
   }, [collections]);
@@ -554,6 +550,47 @@ function App() {
   }, [genderStats]);
 
   const sortSelectValue = filterDate ? `date:${filterDate}` : sortOption;
+
+  const handleManualRefresh = useCallback(() => {
+    loadData(true);
+  }, [loadData]);
+
+  const handleExportVisible = useCallback(() => {
+    if (!hasExportableData) {
+      window.alert('No visible data to export. Adjust filters or date selection and try again.');
+      return;
+    }
+
+    const workbook = XLSX.utils.book_new();
+    let sheetsAdded = 0;
+
+    tableCollections.forEach(({ collection, columns, visibleDocs }) => {
+      if (!visibleDocs.length) return;
+      const header = columns.length ? columns : ['Record'];
+      const rows = [header];
+
+      visibleDocs.forEach((row) => {
+        const fields = getRowFields(row);
+        if (columns.length) {
+          rows.push(columns.map((col) => formatFieldValue(fields[col], { truncate: false })));
+        } else {
+          rows.push([JSON.stringify(fields)]);
+        }
+      });
+
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+      XLSX.utils.book_append_sheet(workbook, ws, getSafeSheetName(collection));
+      sheetsAdded += 1;
+    });
+
+    if (sheetsAdded === 0) {
+      const ws = XLSX.utils.aoa_to_sheet([['Message'], ['No data available for export']]);
+      XLSX.utils.book_append_sheet(workbook, ws, 'Summary');
+    }
+
+    const timestamp = new Date().toISOString().replace(/[:T]/g, '-').split('.')[0];
+    XLSX.writeFile(workbook, `TecnoTribe-dashboard-${timestamp}.xlsx`);
+  }, [hasExportableData, tableCollections]);
 
   async function handleLogin(e) {
     e.preventDefault();
@@ -695,7 +732,7 @@ function App() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
               <div className="hint">Use the provided admin credentials</div>
               <button type="submit" className="btn" disabled={authenticating}>
-                {authenticating ? 'Signing in…' : 'Sign In'}
+                {authenticating ? 'Signing inΓÇª' : 'Sign In'}
               </button>
             </div>
           </form>
@@ -714,7 +751,7 @@ function App() {
             <button className={`tab ${activeTab === 'analytics' ? 'tab-active' : ''}`} onClick={() => setActiveTab('analytics')}>Analytics</button>
           </div>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-            <input className="input" placeholder="Search collections…" value={query} onChange={(e) => setQuery(e.target.value)} />
+            <input className="input" placeholder="Search collectionsΓÇª" value={query} onChange={(e) => setQuery(e.target.value)} />
             <select
               className="input"
               value={sortSelectValue}
@@ -723,16 +760,16 @@ function App() {
               aria-label="Sort collections or filter by date"
             >
               <optgroup label="Sort by">
-                <option value="name-asc">Name · A → Z</option>
-                <option value="name-desc">Name · Z → A</option>
-                <option value="count-desc">Documents · High → Low</option>
-                <option value="count-asc">Documents · Low → High</option>
+                <option value="name-asc">Name ┬╖ A ΓåÆ Z</option>
+                <option value="name-desc">Name ┬╖ Z ΓåÆ A</option>
+                <option value="count-desc">Documents ┬╖ High ΓåÆ Low</option>
+                <option value="count-asc">Documents ┬╖ Low ΓåÆ High</option>
               </optgroup>
               {dailyCounts.length > 0 && (
                 <optgroup label="Filter by date">
                   {dailyCounts.map(({ date, count }) => (
                     <option key={date} value={`date:${date}`}>
-                      {formatDateLabel(date)} · {count} submission{count === 1 ? '' : 's'}
+                      {formatDateLabel(date)} ┬╖ {count} submission{count === 1 ? '' : 's'}
                     </option>
                   ))}
                 </optgroup>
@@ -783,7 +820,7 @@ function App() {
                      data?.status === 'no-db' ? '#ff6b6b' :
                      data?.status === 'error' ? '#ff6b6b' : '#ffda6c'
             }}>
-              {loading ? 'Loading…' : 
+              {loading ? 'LoadingΓÇª' : 
                data?.status === 'connected' ? 'Connected' :
                data?.status === 'no-db' ? 'No DB Config' :
                data?.status === 'error' ? 'Error' : 'Unknown'}
@@ -953,7 +990,7 @@ function App() {
                               ) : (
                                 columns.map((col) => (
                                   <td key={col}>
-                                    {renderCellValue(getRowFields(doc)[col])}
+                                    {formatFieldValue(getRowFields(doc)[col])}
                                   </td>
                                 ))
                               )}
@@ -998,7 +1035,7 @@ function App() {
                           <div className="doc-title">
                             <button className="doc-toggle" onClick={toggleCard} aria-expanded={isOpen}>
                               <span>Student {idx + 1}</span>
-                              <span className={`chevron ${isOpen ? 'open' : ''}`} aria-hidden="true">▸</span>
+                              <span className={`chevron ${isOpen ? 'open' : ''}`} aria-hidden="true">Γû╕</span>
                             </button>
                             <div className="coll-actions">
                               <button className="btn" onClick={() => navigator.clipboard.writeText(json)}>Copy</button>
