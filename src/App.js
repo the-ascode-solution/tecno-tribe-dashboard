@@ -551,47 +551,6 @@ function App() {
 
   const sortSelectValue = filterDate ? `date:${filterDate}` : sortOption;
 
-  const handleManualRefresh = useCallback(() => {
-    loadData(true);
-  }, [loadData]);
-
-  const handleExportVisible = useCallback(() => {
-    if (!hasExportableData) {
-      window.alert('No visible data to export. Adjust filters or date selection and try again.');
-      return;
-    }
-
-    const workbook = XLSX.utils.book_new();
-    let sheetsAdded = 0;
-
-    tableCollections.forEach(({ collection, columns, visibleDocs }) => {
-      if (!visibleDocs.length) return;
-      const header = columns.length ? columns : ['Record'];
-      const rows = [header];
-
-      visibleDocs.forEach((row) => {
-        const fields = getRowFields(row);
-        if (columns.length) {
-          rows.push(columns.map((col) => formatFieldValue(fields[col], { truncate: false })));
-        } else {
-          rows.push([JSON.stringify(fields)]);
-        }
-      });
-
-      const ws = XLSX.utils.aoa_to_sheet(rows);
-      XLSX.utils.book_append_sheet(workbook, ws, getSafeSheetName(collection));
-      sheetsAdded += 1;
-    });
-
-    if (sheetsAdded === 0) {
-      const ws = XLSX.utils.aoa_to_sheet([['Message'], ['No data available for export']]);
-      XLSX.utils.book_append_sheet(workbook, ws, 'Summary');
-    }
-
-    const timestamp = new Date().toISOString().replace(/[:T]/g, '-').split('.')[0];
-    XLSX.writeFile(workbook, `TecnoTribe-dashboard-${timestamp}.xlsx`);
-  }, [hasExportableData, tableCollections]);
-
   async function handleLogin(e) {
     e.preventDefault();
     setError('');
