@@ -133,6 +133,14 @@ const TECH_SOURCE_FIELD_KEYS = new Set([
   'technology update sources',
   'technology update source',
 ]);
+const TOP_PHONE_FUNCTION_FIELD_KEYS = new Set([
+  'top phone functions',
+  'top phone function',
+  'phone functions',
+  'phone function priorities',
+  'priority phone functions',
+  'top smartphone functions',
+]);
 const SOCIAL_PLATFORM_FIELD_KEYS = new Set([
   'social media platforms',
   'social media platform',
@@ -800,6 +808,36 @@ function App() {
         percent: totalSelections ? (count / totalSelections) * 100 : 0,
       };
     }).filter((row) => row.count > 0);
+
+    return { total: totalSelections, rows };
+  }, [baseCollections]);
+
+  const phoneFunctionStats = useMemo(() => {
+    const counts = new Map();
+    let totalSelections = 0;
+    baseCollections.forEach((c) => {
+      (c.docs || []).forEach((doc) => {
+        const fields = getRowFields(doc);
+        Object.entries(fields).forEach(([key, value]) => {
+          const normalized = normalizeFieldName(key);
+          if (!TOP_PHONE_FUNCTION_FIELD_KEYS.has(normalized)) return;
+          const functions = extractDelimitedLabels(value);
+          if (!functions.length) return;
+          functions.forEach((fn) => {
+            counts.set(fn, (counts.get(fn) || 0) + 1);
+            totalSelections += 1;
+          });
+        });
+      });
+    });
+
+    const rows = Array.from(counts.entries())
+      .map(([label, count]) => ({
+        label,
+        count,
+        percent: totalSelections ? (count / totalSelections) * 100 : 0,
+      }))
+      .sort((a, b) => b.count - a.count);
 
     return { total: totalSelections, rows };
   }, [baseCollections]);
@@ -1725,6 +1763,35 @@ function App() {
                           style={{
                             width: `${row.percent.toFixed(1)}%`,
                             background: PIE_COLORS[(index + 1) % PIE_COLORS.length],
+                          }}
+                        />
+                      </div>
+                      <div className="social-bar-value">{row.percent.toFixed(1)}%</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="card">
+              <div className="coll-header">
+                <div className="coll-name">Top phone functions</div>
+                <div className="coll-actions">
+                  <span className="label">{phoneFunctionStats.total} selections</span>
+                </div>
+              </div>
+              {phoneFunctionStats.total === 0 ? (
+                <div className="hint">No "top phone functions" field detected in current data.</div>
+              ) : (
+                <div className="social-bars" role="img" aria-label="Top phone functions bar chart">
+                  {phoneFunctionStats.rows.map((row, index) => (
+                    <div key={row.label || index} className="social-bar">
+                      <div className="social-bar-label">{row.label || 'Unspecified'}</div>
+                      <div className="social-bar-track" aria-hidden="true">
+                        <div
+                          className="social-bar-fill"
+                          style={{
+                            width: `${row.percent.toFixed(1)}%`,
+                            background: PIE_COLORS[(index + 2) % PIE_COLORS.length],
                           }}
                         />
                       </div>
