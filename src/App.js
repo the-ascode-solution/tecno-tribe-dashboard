@@ -83,6 +83,14 @@ const LOCATION_FIELD_KEYS = new Set([
   'address',
   'residence',
 ]);
+const AGE_FIELD_KEYS = new Set([
+  'age',
+  'age group',
+  'age range',
+  'agegroup',
+  'age-range',
+  'agegroup',
+]);
 
 const DATE_FIELD_NAMES = [
   'createdAt','created_at',
@@ -280,6 +288,19 @@ function formatLocationLabel(value) {
       .toLowerCase()
       .replace(/(^|\s)([a-z])/g, (_, space, char) => `${space}${char.toUpperCase()}`)
       .replace(/\s+/g, ' ');
+  }
+  return String(value);
+}
+
+function formatAgeLabel(value) {
+  if (value === null || value === undefined) return 'Unknown';
+  if (typeof value === 'number') {
+    return `${value}`;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return 'Unknown';
+    return trimmed.replace(/\s+/g, ' ');
   }
   return String(value);
 }
@@ -596,6 +617,36 @@ function App() {
     if (!topLocationRows.length) return 0;
     return topLocationRows.reduce((max, row) => Math.max(max, row.count), 0);
   }, [topLocationRows]);
+
+  const ageStats = useMemo(() => {
+    const counts = new Map();
+    let total = 0;
+    baseCollections.forEach((c) => {
+      (c.docs || []).forEach((doc) => {
+        const fields = getRowFields(doc);
+        Object.entries(fields).forEach(([key, value]) => {
+          const normalized = normalizeFieldName(key);
+          if (!AGE_FIELD_KEYS.has(normalized)) return;
+          const label = formatAgeLabel(value);
+          counts.set(label, (counts.get(label) || 0) + 1);
+          total += 1;
+        });
+      });
+    });
+
+    const rows = Array.from(counts.entries())
+      .map(([label, count]) => ({ label, count }))
+      .sort((a, b) => b.count - a.count);
+
+    return { total, rows };
+  }, [baseCollections]);
+
+  const topAgeRows = useMemo(() => ageStats.rows.slice(0, 5), [ageStats]);
+
+  const maxAgeCount = useMemo(() => {
+    if (!topAgeRows.length) return 0;
+    return topAgeRows.reduce((max, row) => Math.max(max, row.count), 0);
+  }, [topAgeRows]);
 
   const genderPieSlices = useMemo(() => {
     if (!genderStats.total) return [];
@@ -1015,6 +1066,67 @@ function App() {
                     </div>
                   </div>
                 </div>
+              )}
+            </div>
+
+            <div className="card analytics-card age-card">
+              <div className="coll-header" style={{ marginBottom: 8 }}>
+                <div className="coll-name">Age distribution</div>
+                <div className="coll-actions">
+                  <span className="label">{ageStats.total} tagged entries</span>
+                </div>
+              </div>
+              {ageStats.total === 0 ? (
+                <div className="hint">No age field detected in current data.</div>
+              ) : (
+                <>
+                  <div className="table-wrap mini">
+                    <table className="analytics-table">
+                      <thead>
+                        <tr>
+                          <th>Age</th>
+                          <th>Entries</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {ageStats.rows.map((row) => (
+                          <tr key={row.label}>
+                            <td>{row.label}</td>
+                            <td>{row.count}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="age-chart" role="img" aria-label="Top age distribution bar chart">
+                    <div className="age-bars">
+                      {topAgeRows.map((row, index) => {
+                        const ratio = maxAgeCount ? row.count / maxAgeCount : 0;
+                        const heightPercent = Math.max(ratio * 100, 12);
+                        return (
+                          <div key={row.label} className="age-bar">
+                            <div className="age-bar-track" aria-hidden="true">
+                              <div
+                                className="age-bar-fill"
+                                style={{
+                                  height: `${heightPercent}%`,
+                                  background: PIE_COLORS[index % PIE_COLORS.length],
+                                }}
+                              />
+                            </div>
+                            <span className="age-bar-value">{row.count}</span>
+                            <span className="age-bar-label">{row.label}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {ageStats.rows.length > topAgeRows.length && (
+                      <div className="age-chart-note">
+                        Showing top {topAgeRows.length} of {ageStats.rows.length} ages
+                      </div>
+                    )}
+                  </div>
+                </>
               )}
             </div>
 
