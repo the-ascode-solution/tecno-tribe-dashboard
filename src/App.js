@@ -135,6 +135,12 @@ const SOCIAL_PLATFORM_FIELD_KEYS = new Set([
   'social media account',
   'social media accounts',
 ]);
+const SOCIAL_TIME_FIELD_KEYS = new Set([
+  'time spent on social media',
+  'time spent social media',
+  'time spent',
+  'time spent on social-media',
+]);
 const RAW_SOCIAL_PLATFORM_DEFINITIONS = [
   { label: 'Instagram', keywords: ['instagram', 'insta', 'ig'] },
   { label: 'Facebook', keywords: ['facebook', 'fb'] },
@@ -766,6 +772,33 @@ function App() {
     return { total: totalSelections, rows };
   }, [baseCollections]);
 
+  const socialTimeStats = useMemo(() => {
+    const counts = new Map();
+    let total = 0;
+    baseCollections.forEach((c) => {
+      (c.docs || []).forEach((doc) => {
+        const fields = getRowFields(doc);
+        Object.entries(fields).forEach(([key, value]) => {
+          const normalized = normalizeFieldName(key);
+          if (!SOCIAL_TIME_FIELD_KEYS.has(normalized)) return;
+          const label = formatBrandLabel(value);
+          counts.set(label, (counts.get(label) || 0) + 1);
+          total += 1;
+        });
+      });
+    });
+
+    const rows = Array.from(counts.entries())
+      .map(([label, count]) => ({
+        label,
+        count,
+        percent: total ? (count / total) * 100 : 0,
+      }))
+      .sort((a, b) => b.count - a.count);
+
+    return { total, rows };
+  }, [baseCollections]);
+
   const locationStats = useMemo(() => {
     const counts = new Map();
     let total = 0;
@@ -938,6 +971,10 @@ function App() {
   const colorSecondaryPieSlices = useMemo(
     () => buildPieSlices(colorSecondaryStats.rows, colorSecondaryStats.total, BUDGET_PIE_MAX),
     [colorSecondaryStats],
+  );
+  const socialTimePieSlices = useMemo(
+    () => buildPieSlices(socialTimeStats.rows, socialTimeStats.total, BUDGET_PIE_MAX),
+    [socialTimeStats],
   );
 
   const genderPieSlices = useMemo(() => {
@@ -1570,34 +1607,68 @@ function App() {
         )}
 
         {activeTab === 'analytics' && (
-          <div className="card social-card">
-            <div className="coll-header" style={{ marginBottom: 12 }}>
-              <div className="coll-name">Social media platforms</div>
-              <div className="coll-actions">
-                <span className="label">{socialStats.total} responses</span>
+          <div className="social-insight-grid">
+            <div className="card">
+              <div className="coll-header">
+                <div className="coll-name">Social media platforms</div>
+                <div className="coll-actions">
+                  <span className="label">{socialStats.total} selections</span>
+                </div>
               </div>
-            </div>
-            {socialStats.total === 0 ? (
-              <div className="hint">No social platform field detected in current data.</div>
-            ) : (
-              <div className="social-bars" role="img" aria-label="Social media platforms preference bar chart">
-                {socialStats.rows.map((row, index) => (
-                  <div key={row.label || index} className="social-bar">
-                    <div className="social-bar-label">{row.label || 'Unspecified'}</div>
-                    <div className="social-bar-track" aria-hidden="true">
-                      <div
-                        className="social-bar-fill"
-                        style={{
-                          width: `${row.percent.toFixed(1)}%`,
-                          background: row.label === 'Snapchat' ? '#000000' : PIE_COLORS[index % PIE_COLORS.length],
-                        }}
-                      />
+              {socialStats.total === 0 ? (
+                <div className="hint">No social platform field detected in current data.</div>
+              ) : (
+                <div className="social-bars" role="img" aria-label="Social media platforms preference bar chart">
+                  {socialStats.rows.map((row, index) => (
+                    <div key={row.label || index} className="social-bar">
+                      <div className="social-bar-label">{row.label || 'Unspecified'}</div>
+                      <div className="social-bar-track" aria-hidden="true">
+                        <div
+                          className="social-bar-fill"
+                          style={{
+                            width: `${row.percent.toFixed(1)}%`,
+                            background: row.label === 'Snapchat' ? '#000000' : PIE_COLORS[index % PIE_COLORS.length],
+                          }}
+                        />
+                      </div>
+                      <div className="social-bar-value">{row.percent.toFixed(1)}%</div>
                     </div>
-                    <div className="social-bar-value">{row.percent.toFixed(1)}%</div>
-                  </div>
-                ))}
+                  ))}
+                </div>
+              )}
+            </div>
+            
+            <div className="card">
+              <div className="coll-header">
+                <div className="coll-name">Time spent on social media</div>
+                <div className="coll-actions">
+                  <span className="label">{socialTimeStats.total} responses</span>
+                </div>
               </div>
-            )}
+              {socialTimeStats.total === 0 ? (
+                <div className="hint">No "time spent on social media" field detected in current data.</div>
+              ) : (
+                <div className="social-time-chart" role="img" aria-label="Time spent on social media pie chart">
+                  <svg viewBox="0 0 120 120" className="social-time-pie">
+                    <circle cx="60" cy="60" r="50" fill="#eef4ff" />
+                    {socialTimePieSlices.map((slice) => (
+                      <path key={slice.label} d={slice.path} fill={slice.color} />
+                    ))}
+                    <circle cx="60" cy="60" r="30" fill="#fff" />
+                    <text x="60" y="66" textAnchor="middle" className="chart-label">TIME</text>
+                  </svg>
+                  <div className="social-time-legend">
+                    {socialTimePieSlices.map((slice) => (
+                      <div key={slice.label} className="legend-row">
+                        <span className="dot" style={{ background: slice.color }} />
+                        <span className="legend-label">{slice.label}</span>
+                        <strong>{slice.percent.toFixed(1)}%</strong>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
