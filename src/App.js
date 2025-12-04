@@ -125,6 +125,27 @@ const COLOR_FIELD_KEYS = new Set([
 const COLOR_SECONDARY_FIELD_KEYS = new Set([
   'preferred phone colors secondary',
 ]);
+const SOCIAL_PLATFORM_FIELD_KEYS = new Set([
+  'social media platforms',
+  'social media platform',
+  'social media paltforms',
+  'social platforms',
+  'social platform',
+  'preferred social media platform',
+  'social media account',
+  'social media accounts',
+]);
+const RAW_SOCIAL_PLATFORM_DEFINITIONS = [
+  { label: 'Instagram', keywords: ['instagram', 'insta', 'ig'] },
+  { label: 'Facebook', keywords: ['facebook', 'fb'] },
+  { label: 'YouTube', keywords: ['youtube', 'you tube', 'yt'] },
+  { label: 'TikTok', keywords: ['tiktok', 'tik tok'] },
+  { label: 'Snapchat', keywords: ['snapchat'] },
+];
+const SOCIAL_PLATFORM_DEFINITIONS = RAW_SOCIAL_PLATFORM_DEFINITIONS.map((def) => ({
+  label: def.label,
+  normalizedKeywords: def.keywords.map((keyword) => normalizeSocialText(keyword)),
+}));
 
 const DATE_FIELD_NAMES = [
   'createdAt','created_at',
@@ -147,10 +168,65 @@ function normalizeFieldName(value) {
 }
 
 function normalizeFilterValue(value) {
-  if (value === null || value === undefined) return ''; 
+  if (value === null || value === undefined) return '';
   if (value === true) return 'true';
   if (value === false) return 'false';
   return value.toString().trim().toLowerCase();
+}
+
+function normalizeSocialText(value) {
+  return (value ?? '')
+    .toString()
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+}
+
+function coerceSocialValues(value) {
+  if (value === null || value === undefined) return [];
+  if (Array.isArray(value)) {
+    return value.flatMap((entry) => coerceSocialValues(entry));
+  }
+  if (typeof value === 'object') {
+    return Object.entries(value).flatMap(([key, entryValue]) => {
+      if (typeof entryValue === 'boolean') {
+        return entryValue ? [key] : [];
+      }
+      if (entryValue === null || entryValue === undefined) {
+        return [];
+      }
+      return coerceSocialValues(entryValue);
+    });
+  }
+  return [value];
+}
+
+function extractSocialPlatforms(value) {
+  const rawValues = coerceSocialValues(value);
+  if (!rawValues.length) return [];
+
+  const matches = new Set();
+
+  rawValues.forEach((entry) => {
+    if (entry === null || entry === undefined) return;
+    const text = entry.toString();
+    const segments = text
+      .split(/[,/|;]+/)
+      .map((segment) => segment.trim())
+      .filter(Boolean);
+    const parts = segments.length ? segments : [text.trim()].filter(Boolean);
+    parts.forEach((part) => {
+      const normalized = normalizeSocialText(part);
+      if (!normalized) return;
+      SOCIAL_PLATFORM_DEFINITIONS.forEach((definition) => {
+        const isMatch = definition.normalizedKeywords.some((keyword) => normalized.includes(keyword));
+        if (isMatch) {
+          matches.add(definition.label);
+        }
+      });
+    });
+  });
+
+  return Array.from(matches);
 }
 
 function parseDateValue(value) {
@@ -654,6 +730,40 @@ function App() {
       }))
       .sort((a, b) => b.count - a.count);
     return { total, rows };
+  }, [baseCollections]);
+
+  const socialStats = useMemo(() => {
+    const counts = new Map();
+    RAW_SOCIAL_PLATFORM_DEFINITIONS.forEach((def) => counts.set(def.label, 0));
+
+    let totalSelections = 0;
+    baseCollections.forEach((c) => {
+      (c.docs || []).forEach((doc) => {
+        const fields = getRowFields(doc);
+        Object.entries(fields).forEach(([key, value]) => {
+          const normalized = normalizeFieldName(key);
+          if (!SOCIAL_PLATFORM_FIELD_KEYS.has(normalized)) return;
+          const platforms = extractSocialPlatforms(value);
+          if (!platforms.length) return;
+          platforms.forEach((platform) => {
+            if (!counts.has(platform)) return;
+            counts.set(platform, counts.get(platform) + 1);
+            totalSelections += 1;
+          });
+        });
+      });
+    });
+
+    const rows = RAW_SOCIAL_PLATFORM_DEFINITIONS.map((def) => {
+      const count = counts.get(def.label) || 0;
+      return {
+        label: def.label,
+        count,
+        percent: totalSelections ? (count / totalSelections) * 100 : 0,
+      };
+    }).filter((row) => row.count > 0);
+
+    return { total: totalSelections, rows };
   }, [baseCollections]);
 
   const locationStats = useMemo(() => {
@@ -1456,6 +1566,38 @@ function App() {
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {activeTab === 'analytics' && (
+          <div className="card social-card">
+            <div className="coll-header" style={{ marginBottom: 12 }}>
+              <div className="coll-name">Social media platforms</div>
+              <div className="coll-actions">
+                <span className="label">{socialStats.total} responses</span>
+              </div>
+            </div>
+            {socialStats.total === 0 ? (
+              <div className="hint">No social platform field detected in current data.</div>
+            ) : (
+              <div className="social-bars" role="img" aria-label="Social media platforms preference bar chart">
+                {socialStats.rows.map((row, index) => (
+                  <div key={row.label || index} className="social-bar">
+                    <div className="social-bar-label">{row.label || 'Unspecified'}</div>
+                    <div className="social-bar-track" aria-hidden="true">
+                      <div
+                        className="social-bar-fill"
+                        style={{
+                          width: `${row.percent.toFixed(1)}%`,
+                          background: row.label === 'Snapchat' ? '#000000' : PIE_COLORS[index % PIE_COLORS.length],
+                        }}
+                      />
+                    </div>
+                    <div className="social-bar-value">{row.percent.toFixed(1)}%</div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
