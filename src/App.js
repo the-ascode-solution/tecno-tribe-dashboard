@@ -125,6 +125,14 @@ const COLOR_FIELD_KEYS = new Set([
 const COLOR_SECONDARY_FIELD_KEYS = new Set([
   'preferred phone colors secondary',
 ]);
+const TECH_SOURCE_FIELD_KEYS = new Set([
+  'tech update sources',
+  'tech update source',
+  'tech updates sources',
+  'tech updates source',
+  'technology update sources',
+  'technology update source',
+]);
 const SOCIAL_PLATFORM_FIELD_KEYS = new Set([
   'social media platforms',
   'social media platform',
@@ -229,6 +237,30 @@ function extractSocialPlatforms(value) {
           matches.add(definition.label);
         }
       });
+    });
+  });
+
+  return Array.from(matches);
+}
+
+function extractDelimitedLabels(value) {
+  const rawValues = coerceSocialValues(value);
+  if (!rawValues.length) return [];
+
+  const matches = new Set();
+
+  rawValues.forEach((entry) => {
+    if (entry === null || entry === undefined) return;
+    const text = entry.toString();
+    const segments = text
+      .split(/[,/|;]+/)
+      .map((segment) => segment.trim())
+      .filter(Boolean);
+    const parts = segments.length ? segments : [text.trim()].filter(Boolean);
+    parts.forEach((part) => {
+      const normalized = formatBrandLabel(part);
+      if (!normalized || normalized === 'Unspecified') return;
+      matches.add(normalized);
     });
   });
 
@@ -814,6 +846,7 @@ function App() {
         });
       });
     });
+
     const rows = Array.from(counts.entries())
       .map(([label, count]) => ({
         label,
@@ -821,16 +854,15 @@ function App() {
         percent: total ? (count / total) * 100 : 0,
       }))
       .sort((a, b) => b.count - a.count);
+
     return { total, rows };
   }, [baseCollections]);
 
-  const topLocationRows = useMemo(() => {
-    return locationStats.rows.slice(0, 5);
-  }, [locationStats]);
+  const topLocationRows = useMemo(() => locationStats.rows.slice(0, 5), [locationStats]);
 
-  const maxLocationCount = useMemo(() => {
+  const maxLocationPercent = useMemo(() => {
     if (!topLocationRows.length) return 0;
-    return topLocationRows.reduce((max, row) => Math.max(max, row.count), 0);
+    return topLocationRows.reduce((max, row) => Math.max(max, row.percent), 0);
   }, [topLocationRows]);
 
   const ageStats = useMemo(() => {
@@ -850,7 +882,11 @@ function App() {
     });
 
     const rows = Array.from(counts.entries())
-      .map(([label, count]) => ({ label, count }))
+      .map(([label, count]) => ({
+        label,
+        count,
+        percent: total ? (count / total) * 100 : 0,
+      }))
       .sort((a, b) => b.count - a.count);
 
     return { total, rows };
@@ -858,10 +894,40 @@ function App() {
 
   const topAgeRows = useMemo(() => ageStats.rows.slice(0, 5), [ageStats]);
 
-  const maxAgeCount = useMemo(() => {
+  const maxAgePercent = useMemo(() => {
     if (!topAgeRows.length) return 0;
-    return topAgeRows.reduce((max, row) => Math.max(max, row.count), 0);
+    return topAgeRows.reduce((max, row) => Math.max(max, row.percent), 0);
   }, [topAgeRows]);
+
+  const techSourceStats = useMemo(() => {
+    const counts = new Map();
+    let totalSelections = 0;
+    baseCollections.forEach((c) => {
+      (c.docs || []).forEach((doc) => {
+        const fields = getRowFields(doc);
+        Object.entries(fields).forEach(([key, value]) => {
+          const normalized = normalizeFieldName(key);
+          if (!TECH_SOURCE_FIELD_KEYS.has(normalized)) return;
+          const sources = extractDelimitedLabels(value);
+          if (!sources.length) return;
+          sources.forEach((source) => {
+            counts.set(source, (counts.get(source) || 0) + 1);
+            totalSelections += 1;
+          });
+        });
+      });
+    });
+
+    const rows = Array.from(counts.entries())
+      .map(([label, count]) => ({
+        label,
+        count,
+        percent: totalSelections ? (count / totalSelections) * 100 : 0,
+      }))
+      .sort((a, b) => b.count - a.count);
+
+    return { total: totalSelections, rows };
+  }, [baseCollections]);
 
   const brandStats = useMemo(() => {
     const counts = new Map();
@@ -1290,14 +1356,14 @@ function App() {
                         <thead>
                           <tr>
                             <th>Location</th>
-                            <th>Forms</th>
+                            <th>%</th>
                           </tr>
                         </thead>
                         <tbody>
                           {locationStats.rows.map((row) => (
                             <tr key={row.label}>
                               <td>{row.label}</td>
-                              <td>{row.count}</td>
+                              <td>{row.percent.toFixed(1)}%</td>
                             </tr>
                           ))}
                         </tbody>
@@ -1308,11 +1374,11 @@ function App() {
                     <div className="location-chart location-chart-horizontal" role="img" aria-label="Top locations bar chart">
                       <div className="location-chart-head">
                         <span className="location-chart-title">Top locations</span>
-                        <span className="label">By submission count</span>
+                        <span className="label">By percentage share</span>
                       </div>
                       <div className="location-bars horizontal">
                         {topLocationRows.map((row, index) => {
-                          const ratio = maxLocationCount ? row.count / maxLocationCount : 0;
+                          const ratio = maxLocationPercent ? row.percent / maxLocationPercent : 0;
                           const widthPercent = Math.max(ratio * 100, 10);
                           const normalizedLabel = (row.label || '').trim().toLowerCase();
                           const barColor = LOCATION_COLOR_OVERRIDES[normalizedLabel] || PIE_COLORS[index % PIE_COLORS.length];
@@ -1328,7 +1394,7 @@ function App() {
                                   }}
                                 />
                               </div>
-                              <span className="location-bar-value">{row.count}</span>
+                              <span className="location-bar-value">{row.percent.toFixed(1)}%</span>
                             </div>
                           );
                         })}
@@ -1414,14 +1480,14 @@ function App() {
                       <thead>
                         <tr>
                           <th>Age</th>
-                          <th>Entries</th>
+                          <th>%</th>
                         </tr>
                       </thead>
                       <tbody>
                         {ageStats.rows.map((row) => (
                           <tr key={row.label}>
                             <td>{row.label}</td>
-                            <td>{row.count}</td>
+                            <td>{row.percent.toFixed(1)}%</td>
                           </tr>
                         ))}
                       </tbody>
@@ -1430,7 +1496,7 @@ function App() {
                   <div className="age-chart" role="img" aria-label="Top age distribution bar chart">
                     <div className="age-bars">
                       {topAgeRows.map((row, index) => {
-                        const ratio = maxAgeCount ? row.count / maxAgeCount : 0;
+                        const ratio = maxAgePercent ? row.percent / maxAgePercent : 0;
                         const heightPercent = Math.max(ratio * 100, 12);
                         return (
                           <div key={row.label} className="age-bar">
@@ -1443,7 +1509,7 @@ function App() {
                                 }}
                               />
                             </div>
-                            <span className="age-bar-value">{row.count}</span>
+                            <span className="age-bar-value">{row.percent.toFixed(1)}%</span>
                             <span className="age-bar-label">{row.label}</span>
                           </div>
                         );
@@ -1520,6 +1586,7 @@ function App() {
                 )}
               </div>
             </div>
+
           </div>
         )}
 
@@ -1638,6 +1705,35 @@ function App() {
               )}
             </div>
             
+            <div className="card">
+              <div className="coll-header">
+                <div className="coll-name">Tech update sources</div>
+                <div className="coll-actions">
+                  <span className="label">{techSourceStats.total} selections</span>
+                </div>
+              </div>
+              {techSourceStats.total === 0 ? (
+                <div className="hint">No tech update source field detected in current data.</div>
+              ) : (
+                <div className="social-bars" role="img" aria-label="Tech update sources bar chart">
+                  {techSourceStats.rows.map((row, index) => (
+                    <div key={row.label || index} className="social-bar">
+                      <div className="social-bar-label">{row.label || 'Unspecified'}</div>
+                      <div className="social-bar-track" aria-hidden="true">
+                        <div
+                          className="social-bar-fill"
+                          style={{
+                            width: `${row.percent.toFixed(1)}%`,
+                            background: PIE_COLORS[(index + 1) % PIE_COLORS.length],
+                          }}
+                        />
+                      </div>
+                      <div className="social-bar-value">{row.percent.toFixed(1)}%</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
             <div className="card">
               <div className="coll-header">
                 <div className="coll-name">Time spent on social media</div>
