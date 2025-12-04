@@ -556,8 +556,8 @@ tbody tr:nth-child(odd) {
 }
 
 .brand-pie-chart {
-  width: 180px;
-  height: 180px;
+  width: 220px;
+  height: 220px;
 }
 
 .brand-legend {
@@ -569,6 +569,65 @@ tbody tr:nth-child(odd) {
 
 .brand-table-full {
   padding-top: 5px;
+}
+
+.insight-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(240px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.insight-card {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 260px;
+}
+
+.insight-title {
+  font-weight: 700;
+  color: var(--text);
+}
+
+.insight-chart {
+  display: flex;
+  gap: 20px;
+  align-items: stretch;
+  flex: 1;
+}
+
+.insight-pie {
+  width: 180px;
+  height: 180px;
+  flex-shrink: 0;
+}
+
+.insight-legend {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.insight-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.insight-list li {
+  display: flex;
+  justify-content: space-between;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.insight-list li strong {
+  color: var(--text);
 }
 
 @media (min-width: 720px) {

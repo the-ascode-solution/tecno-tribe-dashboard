@@ -103,6 +103,28 @@ const BRAND_FIELD_KEYS = new Set([
   'device model',
   'current phone brand',
 ]);
+const BUDGET_FIELD_KEYS = new Set([
+  'budget',
+  'budget range',
+  'price range',
+  'expected budget',
+  'device budget',
+  'monthly budget',
+  'average budget',
+  'phone budget',
+]);
+const COLOR_FIELD_KEYS = new Set([
+  'favorite color',
+  'favourite color',
+  'preferred color',
+  'color',
+  'colour',
+  'phone color',
+  'preferred phone colors',
+]);
+const COLOR_SECONDARY_FIELD_KEYS = new Set([
+  'preferred phone colors secondary',
+]);
 
 const DATE_FIELD_NAMES = [
   'createdAt','created_at',
@@ -361,6 +383,31 @@ function describeArc(cx, cy, r, startAngle, endAngle) {
     'L', cx, cy,
     'Z',
   ].join(' ');
+}
+
+function buildPieSlices(rows, total, maxSlices = PIE_COLORS.length) {
+  if (!total) return [];
+  let workingRows = rows;
+  if (rows.length > maxSlices) {
+    const primary = rows.slice(0, maxSlices - 1);
+    const remainderCount = rows.slice(maxSlices - 1).reduce((sum, row) => sum + row.count, 0);
+    workingRows = [...primary, { label: 'Other', count: remainderCount }];
+  }
+  let startAngle = 0;
+  return workingRows.map((row, index) => {
+    const percent = total ? (row.count / total) * 100 : 0;
+    const angle = (percent / 100) * 360;
+    const endAngle = startAngle + angle;
+    const path = describeArc(60, 60, 58, startAngle, endAngle);
+    const slice = {
+      ...row,
+      percent,
+      path,
+      color: PIE_COLORS[index % PIE_COLORS.length],
+    };
+    startAngle = endAngle;
+    return slice;
+  });
 }
 
 function formatDateLabel(dateString) {
@@ -710,24 +757,78 @@ function App() {
     return [...primary, { label: 'Other', count: remainder, percent: (remainder / brandStats.total) * 100 }];
   }, [brandStats]);
 
-  const brandPieSlices = useMemo(() => {
-    if (!brandStats.total) return [];
-    let startAngle = 0;
-    return brandPieRows.map((row, index) => {
-      const percent = brandStats.total ? (row.count / brandStats.total) * 100 : 0;
-      const angle = (percent / 100) * 360;
-      const endAngle = startAngle + angle;
-      const path = describeArc(60, 60, 58, startAngle, endAngle);
-      const slice = {
-        ...row,
-        percent,
-        path,
-        color: PIE_COLORS[index % PIE_COLORS.length],
-      };
-      startAngle = endAngle;
-      return slice;
+  const brandPieSlices = useMemo(() => buildPieSlices(brandPieRows, brandStats.total), [brandPieRows, brandStats.total]);
+
+  const budgetStats = useMemo(() => {
+    const counts = new Map();
+    let total = 0;
+    baseCollections.forEach((c) => {
+      (c.docs || []).forEach((doc) => {
+        const fields = getRowFields(doc);
+        Object.entries(fields).forEach(([key, value]) => {
+          const normalized = normalizeFieldName(key);
+          if (!BUDGET_FIELD_KEYS.has(normalized)) return;
+          const label = formatBrandLabel(value);
+          counts.set(label, (counts.get(label) || 0) + 1);
+          total += 1;
+        });
+      });
     });
-  }, [brandPieRows, brandStats.total]);
+    const rows = Array.from(counts.entries())
+      .map(([label, count]) => ({ label, count }))
+      .sort((a, b) => b.count - a.count);
+    return { total, rows };
+  }, [baseCollections]);
+
+  const colorStats = useMemo(() => {
+    const counts = new Map();
+    let total = 0;
+    baseCollections.forEach((c) => {
+      (c.docs || []).forEach((doc) => {
+        const fields = getRowFields(doc);
+        Object.entries(fields).forEach(([key, value]) => {
+          const normalized = normalizeFieldName(key);
+          if (!COLOR_FIELD_KEYS.has(normalized)) return;
+          const label = formatBrandLabel(value);
+          counts.set(label, (counts.get(label) || 0) + 1);
+          total += 1;
+        });
+      });
+    });
+    const rows = Array.from(counts.entries())
+      .map(([label, count]) => ({ label, count }))
+      .sort((a, b) => b.count - a.count);
+    return { total, rows };
+  }, [baseCollections]);
+
+  const colorSecondaryStats = useMemo(() => {
+    const counts = new Map();
+    let total = 0;
+    baseCollections.forEach((c) => {
+      (c.docs || []).forEach((doc) => {
+        const fields = getRowFields(doc);
+        Object.entries(fields).forEach(([key, value]) => {
+          const normalized = normalizeFieldName(key);
+          if (!COLOR_SECONDARY_FIELD_KEYS.has(normalized)) return;
+          const label = formatBrandLabel(value);
+          counts.set(label, (counts.get(label) || 0) + 1);
+          total += 1;
+        });
+      });
+    });
+    const rows = Array.from(counts.entries())
+      .map(([label, count]) => ({ label, count }))
+      .sort((a, b) => b.count - a.count);
+    return { total, rows };
+  }, [baseCollections]);
+
+  const BUDGET_PIE_MAX = 5;
+  const budgetPieSlices = useMemo(() => buildPieSlices(budgetStats.rows, budgetStats.total, BUDGET_PIE_MAX), [budgetStats]);
+  const colorPieSlices = useMemo(() => buildPieSlices(colorStats.rows, colorStats.total, BUDGET_PIE_MAX), [colorStats]);
+  const colorSecondaryPieSlices = useMemo(
+    () => buildPieSlices(colorSecondaryStats.rows, colorSecondaryStats.total, BUDGET_PIE_MAX),
+    [colorSecondaryStats],
+  );
 
   const genderPieSlices = useMemo(() => {
     if (!genderStats.total) return [];
@@ -1271,6 +1372,89 @@ function App() {
                   </>
                 )}
               </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'analytics' && (
+          <div className="insight-grid">
+            <div className="card insight-card">
+              <div className="insight-title">Budget distribution</div>
+              {budgetStats.total === 0 ? (
+                <div className="hint">No budget field detected in current data.</div>
+              ) : (
+                <div className="insight-chart" role="img" aria-label="Budget distribution pie chart">
+                  <svg viewBox="0 0 120 120" className="insight-pie">
+                    <circle cx="60" cy="60" r="50" fill="#eef4ff" />
+                    {budgetPieSlices.map((slice) => (
+                      <path key={slice.label} d={slice.path} fill={slice.color} />
+                    ))}
+                    <circle cx="60" cy="60" r="30" fill="#fff" />
+                    <text x="60" y="66" textAnchor="middle" className="chart-label">BUDGET</text>
+                  </svg>
+                  <div className="insight-legend">
+                    {budgetPieSlices.map((slice) => (
+                      <div key={slice.label} className="legend-row">
+                        <span className="dot" style={{ background: slice.color }} />
+                        <span className="legend-label">{slice.label}</span>
+                        <strong>{slice.percent.toFixed(1)}%</strong>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="card insight-card">
+              <div className="insight-title">Preferred colors</div>
+              {colorStats.total === 0 ? (
+                <div className="hint">No color field detected in current data.</div>
+              ) : (
+                <div className="insight-chart" role="img" aria-label="Color preference pie chart">
+                  <svg viewBox="0 0 120 120" className="insight-pie">
+                    <circle cx="60" cy="60" r="50" fill="#eef4ff" />
+                    {colorPieSlices.map((slice) => (
+                      <path key={slice.label} d={slice.path} fill={slice.color} />
+                    ))}
+                    <circle cx="60" cy="60" r="30" fill="#fff" />
+                    <text x="60" y="66" textAnchor="middle" className="chart-label">COLORS</text>
+                  </svg>
+                  <div className="insight-legend">
+                    {colorPieSlices.map((slice) => (
+                      <div key={slice.label} className="legend-row">
+                        <span className="dot" style={{ background: slice.color }} />
+                        <span className="legend-label">{slice.label}</span>
+                        <strong>{slice.percent.toFixed(1)}%</strong>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="card insight-card">
+              <div className="insight-title">Secondary colors</div>
+              {colorSecondaryStats.total === 0 ? (
+                <div className="hint">No “Preferred phone colors secondary” field found.</div>
+              ) : (
+                <div className="insight-chart" role="img" aria-label="Secondary color preference pie chart">
+                  <svg viewBox="0 0 120 120" className="insight-pie">
+                    <circle cx="60" cy="60" r="50" fill="#eef4ff" />
+                    {colorSecondaryPieSlices.map((slice) => (
+                      <path key={slice.label} d={slice.path} fill={slice.color} />
+                    ))}
+                    <circle cx="60" cy="60" r="30" fill="#fff" />
+                    <text x="60" y="66" textAnchor="middle" className="chart-label">SECONDARY</text>
+                  </svg>
+                  <div className="insight-legend">
+                    {colorSecondaryPieSlices.map((slice) => (
+                      <div key={slice.label} className="legend-row">
+                        <span className="dot" style={{ background: slice.color }} />
+                        <span className="legend-label">{slice.label}</span>
+                        <strong>{slice.percent.toFixed(1)}%</strong>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
