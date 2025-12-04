@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
 const { randomUUID } = require('crypto');
+const { verifyAdminCredentials } = require('./shared/adminUsers');
 require('dotenv').config();
 
 const app = express();
@@ -10,8 +11,6 @@ app.use(express.json());
 
 const PORT = process.env.SERVER_PORT || 5000;
 const DATABASE_URL = process.env.DATABASE_URL || "";
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@tecnotribe.site';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '!password$123*';
 const SESSION_TTL_MS = Number(process.env.SESSION_TTL_MS) || 1000 * 60 * 60; // default 1h
 
 console.log('Environment check:');
@@ -60,8 +59,9 @@ app.get('/api/health', (_req, res) => {
 
 app.post('/api/login', (req, res) => {
   const { email, password, clientId } = req.body || {};
-  if (email !== ADMIN_EMAIL || password !== ADMIN_PASSWORD) {
-    return res.status(401).json({ ok: false, error: 'Invalid credentials' });
+  const result = verifyAdminCredentials({ email, password });
+  if (!result.ok) {
+    return res.status(401).json({ ok: false, error: result.error || 'Invalid credentials' });
   }
   if (sessionActive()) {
     return res.status(403).json({ ok: false, error: 'Account already logged in on another device' });

@@ -2,7 +2,7 @@ import './App.css';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { fetchDashboardData } from './api';
 
-const PIE_COLORS = ['#0363f9', '#e47759', '#d7ff8cff', '#3d9a46'];
+const PIE_COLORS = ['#0363f9', '#e47759', '#ff8ccf', '#3d9a46', '#bed0ff'];
 
 const SunIcon = ({ size = 18 }) => (
   <svg
@@ -69,6 +69,17 @@ const HIDDEN_FIELDS = [
 
 const HIDDEN_FIELD_SET = new Set(HIDDEN_FIELDS.map(normalizeFieldName));
 const GENDER_FIELD_KEYS = new Set(['gender', 'sex']);
+const LOCATION_FIELD_KEYS = new Set([
+  'city',
+  'location',
+  'province',
+  'state',
+  'district',
+  'region',
+  'area',
+  'address',
+  'residence',
+]);
 
 const DATE_FIELD_NAMES = [
   'createdAt','created_at',
@@ -255,6 +266,19 @@ function renderCellValue(value) {
     );
   }
   return formatFieldValue(value);
+}
+
+function formatLocationLabel(value) {
+  if (value === null || value === undefined) return 'Unspecified';
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return 'Unspecified';
+    return trimmed
+      .toLowerCase()
+      .replace(/(^|\s)([a-z])/g, (_, space, char) => `${space}${char.toUpperCase()}`)
+      .replace(/\s+/g, ' ');
+  }
+  return String(value);
 }
 
 function formatGenderLabel(value) {
@@ -536,6 +560,31 @@ function App() {
     return { total, rows };
   }, [baseCollections]);
 
+  const locationStats = useMemo(() => {
+    const counts = new Map();
+    let total = 0;
+    baseCollections.forEach((c) => {
+      (c.docs || []).forEach((doc) => {
+        const fields = getRowFields(doc);
+        Object.entries(fields).forEach(([key, value]) => {
+          const normalized = normalizeFieldName(key);
+          if (!LOCATION_FIELD_KEYS.has(normalized)) return;
+          const label = formatLocationLabel(value);
+          counts.set(label, (counts.get(label) || 0) + 1);
+          total += 1;
+        });
+      });
+    });
+    const rows = Array.from(counts.entries())
+      .map(([label, count]) => ({
+        label,
+        count,
+        percent: total ? (count / total) * 100 : 0,
+      }))
+      .sort((a, b) => b.count - a.count);
+    return { total, rows };
+  }, [baseCollections]);
+
   const genderPieSlices = useMemo(() => {
     if (!genderStats.total) return [];
     let startAngle = 0;
@@ -552,6 +601,23 @@ function App() {
       return slice;
     });
   }, [genderStats]);
+
+  const locationPieSlices = useMemo(() => {
+    if (!locationStats.total) return [];
+    let startAngle = 0;
+    return locationStats.rows.map((row, index) => {
+      const angle = (row.percent / 100) * 360;
+      const endAngle = startAngle + angle;
+      const path = describeArc(60, 60, 58, startAngle, endAngle);
+      const slice = {
+        ...row,
+        path,
+        color: PIE_COLORS[index % PIE_COLORS.length],
+      };
+      startAngle = endAngle;
+      return slice;
+    });
+  }, [locationStats]);
 
   const sortSelectValue = filterDate ? `date:${filterDate}` : sortOption;
 
@@ -832,7 +898,38 @@ function App() {
               </div>
             </div>
 
-            <div className="card analytics-card">
+            <div className="card analytics-card location-card">
+              <div className="coll-header" style={{ marginBottom: 8 }}>
+                <div className="coll-name">Location distribution</div>
+                <div className="coll-actions">
+                  <span className="label">{locationStats.total} tagged entries</span>
+                </div>
+              </div>
+              {locationStats.total === 0 ? (
+                <div className="hint">No location field detected in current data.</div>
+              ) : (
+                <div className="table-wrap mini">
+                  <table className="analytics-table">
+                    <thead>
+                      <tr>
+                        <th>Location</th>
+                        <th>Forms</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {locationStats.rows.map((row) => (
+                        <tr key={row.label}>
+                          <td>{row.label}</td>
+                          <td>{row.count}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            <div className="card analytics-card gender-card">
               <div className="coll-header" style={{ marginBottom: 8 }}>
                 <div className="coll-name">Gender distribution</div>
                 <div className="coll-actions">
@@ -885,6 +982,7 @@ function App() {
                 </div>
               )}
             </div>
+
           </div>
         )}
 
