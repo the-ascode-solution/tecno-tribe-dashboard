@@ -3,6 +3,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { fetchDashboardData } from './api';
 
 const PIE_COLORS = ['#0363f9', '#e47759', '#ff8ccf', '#3d9a46', '#bed0ff'];
+const LOCATION_COLOR_OVERRIDES = {
+  kpk: '#f4c542',
+};
 
 const SunIcon = ({ size = 18 }) => (
   <svg
@@ -585,6 +588,15 @@ function App() {
     return { total, rows };
   }, [baseCollections]);
 
+  const topLocationRows = useMemo(() => {
+    return locationStats.rows.slice(0, 5);
+  }, [locationStats]);
+
+  const maxLocationCount = useMemo(() => {
+    if (!topLocationRows.length) return 0;
+    return topLocationRows.reduce((max, row) => Math.max(max, row.count), 0);
+  }, [topLocationRows]);
+
   const genderPieSlices = useMemo(() => {
     if (!genderStats.total) return [];
     let startAngle = 0;
@@ -601,23 +613,6 @@ function App() {
       return slice;
     });
   }, [genderStats]);
-
-  const locationPieSlices = useMemo(() => {
-    if (!locationStats.total) return [];
-    let startAngle = 0;
-    return locationStats.rows.map((row, index) => {
-      const angle = (row.percent / 100) * 360;
-      const endAngle = startAngle + angle;
-      const path = describeArc(60, 60, 58, startAngle, endAngle);
-      const slice = {
-        ...row,
-        path,
-        color: PIE_COLORS[index % PIE_COLORS.length],
-      };
-      startAngle = endAngle;
-      return slice;
-    });
-  }, [locationStats]);
 
   const sortSelectValue = filterDate ? `date:${filterDate}` : sortOption;
 
@@ -908,24 +903,64 @@ function App() {
               {locationStats.total === 0 ? (
                 <div className="hint">No location field detected in current data.</div>
               ) : (
-                <div className="table-wrap mini">
-                  <table className="analytics-table">
-                    <thead>
-                      <tr>
-                        <th>Location</th>
-                        <th>Forms</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {locationStats.rows.map((row) => (
-                        <tr key={row.label}>
-                          <td>{row.label}</td>
-                          <td>{row.count}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <>
+                  <div className="location-table">
+                    <div className="table-wrap mini">
+                      <table className="analytics-table">
+                        <thead>
+                          <tr>
+                            <th>Location</th>
+                            <th>Forms</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {locationStats.rows.map((row) => (
+                            <tr key={row.label}>
+                              <td>{row.label}</td>
+                              <td>{row.count}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                  {topLocationRows.length > 0 && (
+                    <div className="location-chart location-chart-horizontal" role="img" aria-label="Top locations bar chart">
+                      <div className="location-chart-head">
+                        <span className="location-chart-title">Top locations</span>
+                        <span className="label">By submission count</span>
+                      </div>
+                      <div className="location-bars horizontal">
+                        {topLocationRows.map((row, index) => {
+                          const ratio = maxLocationCount ? row.count / maxLocationCount : 0;
+                          const widthPercent = Math.max(ratio * 100, 10);
+                          const normalizedLabel = (row.label || '').trim().toLowerCase();
+                          const barColor = LOCATION_COLOR_OVERRIDES[normalizedLabel] || PIE_COLORS[index % PIE_COLORS.length];
+                          return (
+                            <div key={row.label} className="location-bar horizontal">
+                              <span className="location-bar-label">{row.label}</span>
+                              <div className="location-bar-track" aria-hidden="true">
+                                <div
+                                  className="location-bar-fill"
+                                  style={{
+                                    width: `${widthPercent}%`,
+                                    background: barColor,
+                                  }}
+                                />
+                              </div>
+                              <span className="location-bar-value">{row.count}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {locationStats.rows.length > topLocationRows.length && (
+                        <div className="location-chart-note">
+                          Showing top {topLocationRows.length} of {locationStats.rows.length} locations
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
               )}
             </div>
 
