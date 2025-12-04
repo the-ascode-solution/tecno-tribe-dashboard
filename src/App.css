@@ -516,6 +516,73 @@ tbody tr:nth-child(odd) {
   text-align: center;
 }
 
+.brand-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.brand-table {
+  flex: 1;
+  display: flex;
+}
+
+.brand-table .table-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.brand-table .table-wrap table {
+  flex: 1;
+}
+
+.brand-table .analytics-table {
+  width: 100%;
+}
+
+.brand-pie {
+  flex: 1;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px;
+  background: var(--card);
+  box-shadow: 0 10px 30px rgba(3, 99, 249, 0.12);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+}
+
+.brand-pie-chart {
+  width: 180px;
+  height: 180px;
+}
+
+.brand-legend {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.brand-table-full {
+  padding-top: 5px;
+}
+
+@media (min-width: 720px) {
+  .brand-layout {
+    flex-direction: row;
+    align-items: stretch;
+  }
+
+  .brand-table,
+  .brand-pie {
+    flex: 1;
+  }
+}
+
 @media (max-width: 720px) {
   .analytics-grid {
     grid-template-columns: 1fr;

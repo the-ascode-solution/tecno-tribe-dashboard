@@ -91,6 +91,18 @@ const AGE_FIELD_KEYS = new Set([
   'age-range',
   'agegroup',
 ]);
+const BRAND_FIELD_KEYS = new Set([
+  'brand',
+  'phone brand',
+  'phonebrand',
+  'mobile brand',
+  'device brand',
+  'preferred brand',
+  'smartphone brand',
+  'phone model',
+  'device model',
+  'current phone brand',
+]);
 
 const DATE_FIELD_NAMES = [
   'createdAt','created_at',
@@ -301,6 +313,19 @@ function formatAgeLabel(value) {
     const trimmed = value.trim();
     if (!trimmed) return 'Unknown';
     return trimmed.replace(/\s+/g, ' ');
+  }
+  return String(value);
+}
+
+function formatBrandLabel(value) {
+  if (value === null || value === undefined) return 'Unspecified';
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return 'Unspecified';
+    return trimmed
+      .toLowerCase()
+      .replace(/(^|\s)([a-z])/g, (_, space, char) => `${space}${char.toUpperCase()}`)
+      .replace(/\s+/g, ' ');
   }
   return String(value);
 }
@@ -647,6 +672,62 @@ function App() {
     if (!topAgeRows.length) return 0;
     return topAgeRows.reduce((max, row) => Math.max(max, row.count), 0);
   }, [topAgeRows]);
+
+  const brandStats = useMemo(() => {
+    const counts = new Map();
+    let total = 0;
+    baseCollections.forEach((c) => {
+      (c.docs || []).forEach((doc) => {
+        const fields = getRowFields(doc);
+        Object.entries(fields).forEach(([key, value]) => {
+          const normalized = normalizeFieldName(key);
+          if (!BRAND_FIELD_KEYS.has(normalized)) return;
+          const label = formatBrandLabel(value);
+          counts.set(label, (counts.get(label) || 0) + 1);
+          total += 1;
+        });
+      });
+    });
+
+    const rows = Array.from(counts.entries())
+      .map(([label, count]) => ({
+        label,
+        count,
+        percent: total ? (count / total) * 100 : 0,
+      }))
+      .sort((a, b) => b.count - a.count);
+
+    return { total, rows };
+  }, [baseCollections]);
+
+  const MAX_BRAND_SLICES = 5;
+  const brandPieRows = useMemo(() => {
+    if (!brandStats.total) return [];
+    if (brandStats.rows.length <= MAX_BRAND_SLICES) return brandStats.rows;
+    const primary = brandStats.rows.slice(0, MAX_BRAND_SLICES - 1);
+    const primaryTotal = primary.reduce((sum, row) => sum + row.count, 0);
+    const remainder = brandStats.total - primaryTotal;
+    return [...primary, { label: 'Other', count: remainder, percent: (remainder / brandStats.total) * 100 }];
+  }, [brandStats]);
+
+  const brandPieSlices = useMemo(() => {
+    if (!brandStats.total) return [];
+    let startAngle = 0;
+    return brandPieRows.map((row, index) => {
+      const percent = brandStats.total ? (row.count / brandStats.total) * 100 : 0;
+      const angle = (percent / 100) * 360;
+      const endAngle = startAngle + angle;
+      const path = describeArc(60, 60, 58, startAngle, endAngle);
+      const slice = {
+        ...row,
+        percent,
+        path,
+        color: PIE_COLORS[index % PIE_COLORS.length],
+      };
+      startAngle = endAngle;
+      return slice;
+    });
+  }, [brandPieRows, brandStats.total]);
 
   const genderPieSlices = useMemo(() => {
     if (!genderStats.total) return [];
@@ -1071,7 +1152,7 @@ function App() {
 
             <div className="card analytics-card age-card">
               <div className="coll-header" style={{ marginBottom: 8 }}>
-                <div className="coll-name">Age distribution</div>
+                <div className="coll-name">Age insights</div>
                 <div className="coll-actions">
                   <span className="label">{ageStats.total} tagged entries</span>
                 </div>
@@ -1130,6 +1211,67 @@ function App() {
               )}
             </div>
 
+          </div>
+        )}
+
+        {activeTab === 'analytics' && (
+          <div className="card analytics-card brand-card-full">
+            <div className="brand-layout">
+              <div className="table-wrap brand-table">
+                <table className="analytics-table">
+                  <thead>
+                    <tr>
+                      <th>Phone brand</th>
+                      <th>Entries</th>
+                      <th>%</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {brandStats.rows.length === 0 ? (
+                      <tr>
+                        <td colSpan={3} style={{ textAlign: 'center', padding: '18px 0' }}>
+                          No phone brand field detected in current data.
+                        </td>
+                      </tr>
+                    ) : (
+                      brandStats.rows.map((row) => (
+                        <tr key={row.label}>
+                          <td>{row.label}</td>
+                          <td>{row.count}</td>
+                          <td>{row.percent.toFixed(1)}%</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <div className="brand-pie" role="img" aria-label="Phone brand pie chart">
+                <div className="brand-section-title">Phone brand distribution</div>
+                {brandStats.total === 0 ? (
+                  <div className="hint" style={{ textAlign: 'center' }}>Add phone brand fields to see the chart.</div>
+                ) : (
+                  <>
+                    <svg viewBox="0 0 120 120" className="brand-pie-chart">
+                      <circle cx="60" cy="60" r="50" fill="#eef4ff" />
+                      {brandPieSlices.map((slice) => (
+                        <path key={slice.label} d={slice.path} fill={slice.color} />
+                      ))}
+                      <circle cx="60" cy="60" r="30" fill="#fff" />
+                      <text x="60" y="66" textAnchor="middle" className="chart-label">BRANDS</text>
+                    </svg>
+                    <div className="brand-legend">
+                      {brandPieSlices.map((slice) => (
+                        <div key={slice.label} className="legend-row">
+                          <span className="dot" style={{ background: slice.color }} />
+                          <span className="legend-label">{slice.label}</span>
+                          <strong>{slice.percent.toFixed(1)}%</strong>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
           </div>
         )}
 
