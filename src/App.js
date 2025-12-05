@@ -72,6 +72,30 @@ const HIDDEN_FIELDS = [
 
 const HIDDEN_FIELD_SET = new Set(HIDDEN_FIELDS.map(normalizeFieldName));
 const GENDER_FIELD_KEYS = new Set(['gender', 'sex']);
+const FEATURE_RATING_OPTIONS = [
+  { key: 'durability', label: 'Durability', keywords: ['durability', 'durable'] },
+  { key: 'ai-feature', label: 'AI feature', keywords: ['ai feature', 'ai features', 'artificial intelligence'] },
+  { key: 'slim-design', label: 'Slim design', keywords: ['slim design', 'slim', 'thin'] },
+  { key: 'high-display', label: 'High display', keywords: ['high display', 'display quality', 'display'] },
+  { key: 'long-battery', label: 'Long battery', keywords: ['long battery', 'battery life', 'long-lasting battery'] },
+  { key: 'fast-charging', label: 'Fast charging', keywords: ['fast charging', 'quick charge', 'rapid charge'] },
+  { key: 'high-performance', label: 'High performance', keywords: ['high performance', 'performance'] },
+  { key: 'intelligent-camera', label: 'Intelligent camera', keywords: ['intelligent camera', 'smart camera', 'ai camera'] },
+];
+
+function matchFeatureRatingOption(candidate) {
+  if (!candidate) return null;
+  const normalized = normalizeFieldName(candidate);
+  if (!normalized) return null;
+  return (
+    FEATURE_RATING_OPTIONS.find((option) => {
+      const optionLabel = normalizeFieldName(option.label);
+      if (normalized.includes(optionLabel)) return true;
+      return option.keywords.some((keyword) => normalized.includes(normalizeFieldName(keyword)));
+    }) || null
+  );
+}
+
 const LOCATION_FIELD_KEYS = new Set([
   'city',
   'location',
@@ -274,6 +298,32 @@ function extractSocialPlatforms(value) {
   });
 
   return Array.from(matches);
+}
+
+function extractFeatureRatingEntries(value) {
+  const rawValues = coerceSocialValues(value);
+  if (!rawValues.length) return [];
+
+  const entries = [];
+
+  rawValues.forEach((entry) => {
+    if (entry === null || entry === undefined) return;
+    const text = entry.toString();
+    const segments = text
+      .split(/[,/|;]+/)
+      .map((segment) => segment.trim())
+      .filter(Boolean);
+    const candidates = segments.length ? segments : [text.trim()].filter(Boolean);
+    candidates.forEach((candidate) => {
+      const option = matchFeatureRatingOption(candidate);
+      if (!option) return;
+      const score = parseRatingScore(candidate);
+      if (!Number.isFinite(score)) return;
+      entries.push({ key: option.key, score });
+    });
+  });
+
+  return entries;
 }
 
 function extractDelimitedLabels(value) {
@@ -497,6 +547,17 @@ function formatBrandLabel(value) {
       .replace(/\s+/g, ' ');
   }
   return String(value);
+}
+
+function parseRatingScore(value) {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+  const match = value.toString().match(/([1-5](?:\.\d+)?)/);
+  if (!match) return null;
+  const parsed = Number(match[1]);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function formatGenderLabel(value) {
@@ -975,30 +1036,65 @@ function App() {
   }, [baseCollections]);
 
   const featureRatingStats = useMemo(() => {
-    const counts = new Map();
-    let total = 0;
+    const scoreMap = new Map(
+      FEATURE_RATING_OPTIONS.map((option) => [option.key, { totalScore: 0, responses: 0 }]),
+    );
+    let totalRespondents = 0;
+
     baseCollections.forEach((c) => {
       (c.docs || []).forEach((doc) => {
         const fields = getRowFields(doc);
         Object.entries(fields).forEach(([key, value]) => {
           const normalized = normalizeFieldName(key);
           if (!FEATURE_RATING_FIELD_KEYS.has(normalized)) return;
-          const label = formatBrandLabel(value);
-          counts.set(label, (counts.get(label) || 0) + 1);
-          total += 1;
+
+          if (value && typeof value === 'object' && !Array.isArray(value)) {
+            const hasScore = Object.values(value).some((entry) => Number.isFinite(Number(entry)));
+            if (!hasScore) return;
+            totalRespondents += 1;
+            Object.entries(value).forEach(([rawLabel, rawScore]) => {
+              const score = parseRatingScore(rawScore);
+              if (!Number.isFinite(score)) return;
+              const option = matchFeatureRatingOption(rawLabel);
+              if (!option) return;
+              const current = scoreMap.get(option.key);
+              scoreMap.set(option.key, {
+                totalScore: (current?.totalScore || 0) + score,
+                responses: (current?.responses || 0) + 1,
+              });
+            });
+            return;
+          }
+
+          const entries = extractFeatureRatingEntries(value);
+          if (!entries.length) return;
+          totalRespondents += 1;
+          entries.forEach(({ key: match, score }) => {
+            const current = scoreMap.get(match);
+            scoreMap.set(match, {
+              totalScore: (current?.totalScore || 0) + score,
+              responses: (current?.responses || 0) + 1,
+            });
+          });
         });
       });
     });
 
-    const rows = Array.from(counts.entries())
-      .map(([label, count]) => ({
-        label,
-        count,
-        percent: total ? (count / total) * 100 : 0,
-      }))
-      .sort((a, b) => b.count - a.count);
+    const rows = FEATURE_RATING_OPTIONS.map((option, index) => {
+      const bucket = scoreMap.get(option.key) || { totalScore: 0, responses: 0 };
+      const average = bucket.responses ? bucket.totalScore / bucket.responses : 0;
+      const percentile = average ? Math.min((average / 5) * 100, 100) : 0;
+      return {
+        key: option.key,
+        label: option.label,
+        count: bucket.responses,
+        score: average,
+        percent: percentile,
+        color: PIE_COLORS[index % PIE_COLORS.length],
+      };
+    });
 
-    return { total, rows };
+    return { total: totalRespondents, rows };
   }, [baseCollections]);
 
   const locationStats = useMemo(() => {
@@ -1934,6 +2030,40 @@ function App() {
         )}
 
         {activeTab === 'analytics' && (
+          <div className="card feature-rating-card">
+            <div className="coll-header">
+              <div className="coll-name">Feature rating focus</div>
+              <div className="coll-actions">
+                <span className="label">{featureRatingStats.total} selections</span>
+              </div>
+            </div>
+            {featureRatingStats.total === 0 ? (
+              <div className="hint">No "feature rating" field detected in current data.</div>
+            ) : (
+              <div className="feature-rating-bars" role="img" aria-label="Feature rating horizontal bar chart">
+                {featureRatingStats.rows.map((row) => (
+                  <div key={row.key} className="feature-rating-bar">
+                    <div className="feature-rating-meta">
+                      <span className="feature-rating-label">{row.label}</span>
+                      <span className="feature-rating-value">{row.percent.toFixed(1)}%</span>
+                    </div>
+                    <div className="feature-rating-track" aria-hidden="true">
+                      <div
+                        className="feature-rating-fill"
+                        style={{
+                          width: `${row.percent}%`,
+                          background: row.color,
+                        }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'analytics' && (
           <div className="social-insight-grid">
             <div className="card">
               <div className="coll-header">
@@ -2014,35 +2144,6 @@ function App() {
                           style={{
                             width: `${row.percent.toFixed(1)}%`,
                             background: PIE_COLORS[(index + 2) % PIE_COLORS.length],
-                          }}
-                        />
-                      </div>
-                      <div className="social-bar-value">{row.percent.toFixed(1)}%</div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-            <div className="card">
-              <div className="coll-header">
-                <div className="coll-name">Feature rating</div>
-                <div className="coll-actions">
-                  <span className="label">{featureRatingStats.total} responses</span>
-                </div>
-              </div>
-              {featureRatingStats.total === 0 ? (
-                <div className="hint">No "feature rating" field detected in current data.</div>
-              ) : (
-                <div className="social-bars" role="img" aria-label="Feature rating bar chart">
-                  {featureRatingStats.rows.map((row, index) => (
-                    <div key={row.label || index} className="social-bar">
-                      <div className="social-bar-label">{row.label || 'Unspecified'}</div>
-                      <div className="social-bar-track" aria-hidden="true">
-                        <div
-                          className="social-bar-fill"
-                          style={{
-                            width: `${row.percent.toFixed(1)}%`,
-                            background: PIE_COLORS[(index + 3) % PIE_COLORS.length],
                           }}
                         />
                       </div>
