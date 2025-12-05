@@ -170,6 +170,12 @@ const TECNO_EXPERIENCE_FIELD_KEYS = new Set([
   'experience using tecno',
   'tecno brand experience',
 ]);
+const FOLLOWS_TECH_CONTENT_FIELD_KEYS = new Set([
+  'follows tech content',
+  'follow tech content',
+  'following tech content',
+  'tech content follower',
+]);
 const RAW_SOCIAL_PLATFORM_DEFINITIONS = [
   { label: 'Instagram', keywords: ['instagram', 'insta', 'ig'] },
   { label: 'Facebook', keywords: ['facebook', 'fb'] },
@@ -791,6 +797,33 @@ function App() {
     return { total, rows };
   }, [baseCollections]);
 
+  const followsTechContentStats = useMemo(() => {
+    const counts = new Map();
+    let total = 0;
+    baseCollections.forEach((c) => {
+      (c.docs || []).forEach((doc) => {
+        const fields = getRowFields(doc);
+        Object.entries(fields).forEach(([key, value]) => {
+          const normalized = normalizeFieldName(key);
+          if (!FOLLOWS_TECH_CONTENT_FIELD_KEYS.has(normalized)) return;
+          const label = formatBrandLabel(value);
+          counts.set(label, (counts.get(label) || 0) + 1);
+          total += 1;
+        });
+      });
+    });
+
+    const rows = Array.from(counts.entries())
+      .map(([label, count]) => ({
+        label,
+        count,
+        percent: total ? (count / total) * 100 : 0,
+      }))
+      .sort((a, b) => b.count - a.count);
+
+    return { total, rows };
+  }, [baseCollections]);
+
   const tecnoExperienceStats = useMemo(() => {
     const counts = new Map();
     let total = 0;
@@ -1154,6 +1187,10 @@ function App() {
   const tecnoExperiencePieSlices = useMemo(
     () => buildPieSlices(tecnoExperienceStats.rows, tecnoExperienceStats.total, BUDGET_PIE_MAX),
     [tecnoExperienceStats],
+  );
+  const followsTechContentPieSlices = useMemo(
+    () => buildPieSlices(followsTechContentStats.rows, followsTechContentStats.total, BUDGET_PIE_MAX),
+    [followsTechContentStats],
   );
 
   const genderPieSlices = useMemo(() => {
@@ -1825,6 +1862,32 @@ function App() {
                   </svg>
                   <div className="insight-legend">
                     {tecnoExperiencePieSlices.map((slice) => (
+                      <div key={slice.label} className="legend-row">
+                        <span className="dot" style={{ background: slice.color }} />
+                        <span className="legend-label">{slice.label}</span>
+                        <strong>{slice.percent.toFixed(1)}%</strong>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="card insight-card">
+              <div className="insight-title">Follows tech content</div>
+              {followsTechContentStats.total === 0 ? (
+                <div className="hint">No "follows tech content" field detected in current data.</div>
+              ) : (
+                <div className="insight-chart" role="img" aria-label="Follows tech content pie chart">
+                  <svg viewBox="0 0 120 120" className="insight-pie">
+                    <circle cx="60" cy="60" r="50" fill="#eef4ff" />
+                    {followsTechContentPieSlices.map((slice) => (
+                      <path key={slice.label} d={slice.path} fill={slice.color} />
+                    ))}
+                    <circle cx="60" cy="60" r="30" fill="#fff" />
+                    <text x="60" y="66" textAnchor="middle" className="chart-label">FOLLOW</text>
+                  </svg>
+                  <div className="insight-legend">
+                    {followsTechContentPieSlices.map((slice) => (
                       <div key={slice.label} className="legend-row">
                         <span className="dot" style={{ background: slice.color }} />
                         <span className="legend-label">{slice.label}</span>
