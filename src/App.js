@@ -73,14 +73,14 @@ const HIDDEN_FIELDS = [
 const HIDDEN_FIELD_SET = new Set(HIDDEN_FIELDS.map(normalizeFieldName));
 const GENDER_FIELD_KEYS = new Set(['gender', 'sex']);
 const FEATURE_RATING_OPTIONS = [
-  { key: 'durability', label: 'Durability', keywords: ['durability', 'durable'] },
-  { key: 'ai-feature', label: 'AI feature', keywords: ['ai feature', 'ai features', 'artificial intelligence'] },
-  { key: 'slim-design', label: 'Slim design', keywords: ['slim design', 'slim', 'thin'] },
-  { key: 'high-display', label: 'High display', keywords: ['high display', 'display quality', 'display'] },
-  { key: 'long-battery', label: 'Long battery', keywords: ['long battery', 'battery life', 'long-lasting battery'] },
-  { key: 'fast-charging', label: 'Fast charging', keywords: ['fast charging', 'quick charge', 'rapid charge'] },
-  { key: 'high-performance', label: 'High performance', keywords: ['high performance', 'performance'] },
-  { key: 'intelligent-camera', label: 'Intelligent camera', keywords: ['intelligent camera', 'smart camera', 'ai camera'] },
+  { key: 'durability', label: 'Durability', keywords: ['durability', 'durable', 'sturdy'] },
+  { key: 'ai-feature', label: 'AI feature', keywords: ['ai feature', 'ai features', 'artificial intelligence', 'ai'] },
+  { key: 'slim-design', label: 'Slim design', keywords: ['slim design', 'slim', 'thin', 'design'] },
+  { key: 'high-display', label: 'High display', keywords: ['high display', 'display quality', 'display', 'screen'] },
+  { key: 'long-battery', label: 'Long battery', keywords: ['long battery', 'battery life', 'long-lasting battery', 'battery'] },
+  { key: 'fast-charging', label: 'Fast charging', keywords: ['fast charging', 'quick charge', 'rapid charge', 'charging', 'charge'] },
+  { key: 'high-performance', label: 'High performance', keywords: ['high performance', 'performance', 'speed', 'fast'] },
+  { key: 'intelligent-camera', label: 'Intelligent camera', keywords: ['intelligent camera', 'smart camera', 'ai camera', 'camera', 'photo'] },
 ];
 
 function matchFeatureRatingOption(candidate) {
@@ -219,13 +219,13 @@ const SOCIAL_PLATFORM_DEFINITIONS = RAW_SOCIAL_PLATFORM_DEFINITIONS.map((def) =>
 }));
 
 const DATE_FIELD_NAMES = [
-  'createdAt','created_at',
-  'updatedAt','updated_at',
-  'submittedAt','submitted_at',
-  'timestamp','Timestamp',
-  'submissionDate','submission_date',
-  'date','Date',
-  'time','Time',
+  'createdAt', 'created_at',
+  'updatedAt', 'updated_at',
+  'submittedAt', 'submitted_at',
+  'timestamp', 'Timestamp',
+  'submissionDate', 'submission_date',
+  'date', 'Date',
+  'time', 'Time',
 ];
 
 function normalizeFieldName(value) {
@@ -340,11 +340,11 @@ function extractFeatureRatingEntries(value) {
       const option = matchFeatureRatingOption(labelCandidate);
       const scoreCandidate = parseRatingScore(
         input.score ??
-          input.rating ??
-          input.value ??
-          input.percent ??
-          input.points ??
-          input.rank,
+        input.rating ??
+        input.value ??
+        input.percent ??
+        input.points ??
+        input.rank,
       );
       if (option && Number.isFinite(scoreCandidate)) {
         pushEntry(option.key, scoreCandidate);
@@ -1150,13 +1150,19 @@ function App() {
       const bucket = scoreMap.get(option.key) || { totalScore: 0, responses: 0 };
       const average = bucket.responses ? bucket.totalScore / bucket.responses : 0;
       const percentile = average ? Math.min((average / 5) * 100, 100) : 0;
+
+      let color = PIE_COLORS[index % PIE_COLORS.length];
+      if (option.key === 'long-battery') {
+        color = '#f4c542'; // Yellow
+      }
+
       return {
         key: option.key,
         label: option.label,
         count: bucket.responses,
         score: average,
         percent: percentile,
-        color: PIE_COLORS[index % PIE_COLORS.length],
+        color,
       };
     });
 
@@ -1628,16 +1634,16 @@ function App() {
           </div>
           <div className="stat">
             <div className="label">Status</div>
-            <div className="value" style={{ 
-              color: loading ? '#ffda6c' : 
-                     data?.status === 'connected' ? '#1ad1a5' :
-                     data?.status === 'no-db' ? '#ff6b6b' :
-                     data?.status === 'error' ? '#ff6b6b' : '#ffda6c'
+            <div className="value" style={{
+              color: loading ? '#ffda6c' :
+                data?.status === 'connected' ? '#1ad1a5' :
+                  data?.status === 'no-db' ? '#ff6b6b' :
+                    data?.status === 'error' ? '#ff6b6b' : '#ffda6c'
             }}>
-              {loading ? 'Loading…' : 
-               data?.status === 'connected' ? 'Connected' :
-               data?.status === 'no-db' ? 'No DB Config' :
-               data?.status === 'error' ? 'Error' : 'Unknown'}
+              {loading ? 'Loading…' :
+                data?.status === 'connected' ? 'Connected' :
+                  data?.status === 'no-db' ? 'No DB Config' :
+                    data?.status === 'error' ? 'Error' : 'Unknown'}
             </div>
           </div>
         </div>
@@ -2096,7 +2102,7 @@ function App() {
         )}
 
         {activeTab === 'analytics' && (
-          <div className="card feature-rating-card">
+          <div className="card feature-rating-card" style={{ paddingTop: '15px' }}>
             <div className="coll-header">
               <div className="coll-name">Feature rating focus</div>
               <div className="coll-actions">
@@ -2160,7 +2166,7 @@ function App() {
                 </div>
               )}
             </div>
-            
+
             <div className="card">
               <div className="coll-header">
                 <div className="coll-name">Tech update sources</div>
@@ -2347,7 +2353,7 @@ function App() {
                   <div className="cards-grid">
                     {docs.map((row, idx) => {
                       const entriesRaw = Object.entries(getRowFields(row));
-                      const excluded = new Set(['_id','__v','createdAt','updatedAt','timestamps','metadata','ipAddress','userAgent','id','submitted_at']);
+                      const excluded = new Set(['_id', '__v', 'createdAt', 'updatedAt', 'timestamps', 'metadata', 'ipAddress', 'userAgent', 'id', 'submitted_at']);
                       // Show all fields including null/empty ones, except explicitly hidden ones
                       const entries = entriesRaw
                         .filter(([k]) => {
@@ -2396,7 +2402,7 @@ function App() {
                                         if (isRanking) {
                                           // Sort by rank (ascending order)
                                           const sortedEntries = Object.entries(v)
-                                            .sort(([,a], [,b]) => {
+                                            .sort(([, a], [, b]) => {
                                               const numA = parseFloat(a);
                                               const numB = parseFloat(b);
                                               if (isNaN(numA) && isNaN(numB)) return 0;
