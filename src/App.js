@@ -301,14 +301,61 @@ function extractSocialPlatforms(value) {
 }
 
 function extractFeatureRatingEntries(value) {
-  const rawValues = coerceSocialValues(value);
-  if (!rawValues.length) return [];
-
   const entries = [];
 
-  rawValues.forEach((entry) => {
-    if (entry === null || entry === undefined) return;
-    const text = entry.toString();
+  const pushEntry = (key, score) => {
+    if (!key || !Number.isFinite(score)) return;
+    entries.push({ key, score });
+  };
+
+  const visit = (input) => {
+    if (input === null || input === undefined) return;
+
+    if (Array.isArray(input)) {
+      input.forEach(visit);
+      return;
+    }
+
+    if (typeof input === 'object') {
+      const directMatches = [];
+      Object.entries(input).forEach(([rawLabel, rawScore]) => {
+        const option = matchFeatureRatingOption(rawLabel);
+        if (!option) return;
+        const score = parseRatingScore(rawScore);
+        if (!Number.isFinite(score)) return;
+        directMatches.push({ key: option.key, score });
+      });
+      if (directMatches.length) {
+        directMatches.forEach(({ key, score }) => pushEntry(key, score));
+        return;
+      }
+
+      const labelCandidate =
+        input.label ??
+        input.feature ??
+        input.option ??
+        input.category ??
+        input.name ??
+        input.title;
+      const option = matchFeatureRatingOption(labelCandidate);
+      const scoreCandidate = parseRatingScore(
+        input.score ??
+          input.rating ??
+          input.value ??
+          input.percent ??
+          input.points ??
+          input.rank,
+      );
+      if (option && Number.isFinite(scoreCandidate)) {
+        pushEntry(option.key, scoreCandidate);
+        return;
+      }
+
+      Object.values(input).forEach(visit);
+      return;
+    }
+
+    const text = input.toString();
     const segments = text
       .split(/[,/|;]+/)
       .map((segment) => segment.trim())
@@ -319,9 +366,11 @@ function extractFeatureRatingEntries(value) {
       if (!option) return;
       const score = parseRatingScore(candidate);
       if (!Number.isFinite(score)) return;
-      entries.push({ key: option.key, score });
+      pushEntry(option.key, score);
     });
-  });
+  };
+
+  visit(value);
 
   return entries;
 }
@@ -554,10 +603,27 @@ function parseRatingScore(value) {
   if (typeof value === 'number') {
     return Number.isFinite(value) ? value : null;
   }
-  const match = value.toString().match(/([1-5](?:\.\d+)?)/);
-  if (!match) return null;
-  const parsed = Number(match[1]);
-  return Number.isFinite(parsed) ? parsed : null;
+  if (typeof value === 'string') {
+    const match = value.toString().match(/([1-5](?:\.\d+)?)/);
+    if (!match) return null;
+    const parsed = Number(match[1]);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      const score = parseRatingScore(entry);
+      if (Number.isFinite(score)) return score;
+    }
+    return null;
+  }
+  if (typeof value === 'object') {
+    for (const entry of Object.values(value)) {
+      const score = parseRatingScore(entry);
+      if (Number.isFinite(score)) return score;
+    }
+    return null;
+  }
+  return null;
 }
 
 function formatGenderLabel(value) {
