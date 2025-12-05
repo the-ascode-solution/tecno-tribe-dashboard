@@ -157,6 +157,12 @@ const SOCIAL_TIME_FIELD_KEYS = new Set([
   'time spent',
   'time spent on social-media',
 ]);
+const FEATURE_RATING_FIELD_KEYS = new Set([
+  'feature rating',
+  'feature ratings',
+  'phone feature rating',
+  'device feature rating',
+]);
 const PHONE_CHANGE_FIELD_KEYS = new Set([
   'phone change frequency',
   'phone change freq',
@@ -904,10 +910,9 @@ function App() {
       const count = counts.get(def.label) || 0;
       return {
         label: def.label,
-        count,
         percent: totalSelections ? (count / totalSelections) * 100 : 0,
       };
-    }).filter((row) => row.count > 0);
+    });
 
     return { total: totalSelections, rows };
   }, [baseCollections]);
@@ -951,6 +956,33 @@ function App() {
         Object.entries(fields).forEach(([key, value]) => {
           const normalized = normalizeFieldName(key);
           if (!SOCIAL_TIME_FIELD_KEYS.has(normalized)) return;
+          const label = formatBrandLabel(value);
+          counts.set(label, (counts.get(label) || 0) + 1);
+          total += 1;
+        });
+      });
+    });
+
+    const rows = Array.from(counts.entries())
+      .map(([label, count]) => ({
+        label,
+        count,
+        percent: total ? (count / total) * 100 : 0,
+      }))
+      .sort((a, b) => b.count - a.count);
+
+    return { total, rows };
+  }, [baseCollections]);
+
+  const featureRatingStats = useMemo(() => {
+    const counts = new Map();
+    let total = 0;
+    baseCollections.forEach((c) => {
+      (c.docs || []).forEach((doc) => {
+        const fields = getRowFields(doc);
+        Object.entries(fields).forEach(([key, value]) => {
+          const normalized = normalizeFieldName(key);
+          if (!FEATURE_RATING_FIELD_KEYS.has(normalized)) return;
           const label = formatBrandLabel(value);
           counts.set(label, (counts.get(label) || 0) + 1);
           total += 1;
@@ -1982,6 +2014,35 @@ function App() {
                           style={{
                             width: `${row.percent.toFixed(1)}%`,
                             background: PIE_COLORS[(index + 2) % PIE_COLORS.length],
+                          }}
+                        />
+                      </div>
+                      <div className="social-bar-value">{row.percent.toFixed(1)}%</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="card">
+              <div className="coll-header">
+                <div className="coll-name">Feature rating</div>
+                <div className="coll-actions">
+                  <span className="label">{featureRatingStats.total} responses</span>
+                </div>
+              </div>
+              {featureRatingStats.total === 0 ? (
+                <div className="hint">No "feature rating" field detected in current data.</div>
+              ) : (
+                <div className="social-bars" role="img" aria-label="Feature rating bar chart">
+                  {featureRatingStats.rows.map((row, index) => (
+                    <div key={row.label || index} className="social-bar">
+                      <div className="social-bar-label">{row.label || 'Unspecified'}</div>
+                      <div className="social-bar-track" aria-hidden="true">
+                        <div
+                          className="social-bar-fill"
+                          style={{
+                            width: `${row.percent.toFixed(1)}%`,
+                            background: PIE_COLORS[(index + 3) % PIE_COLORS.length],
                           }}
                         />
                       </div>
