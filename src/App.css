@@ -622,8 +622,8 @@ tbody tr:nth-child(odd) {
 }
 
 .insight-pie {
-  width: 180px;
-  height: 180px;
+  width: 210px;
+  height: 210px;
   flex-shrink: 0;
 }
 
@@ -631,7 +631,7 @@ tbody tr:nth-child(odd) {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
   overflow: hidden;
 }
