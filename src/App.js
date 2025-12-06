@@ -1,5 +1,6 @@
 import './App.css';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { utils, writeFile } from 'xlsx';
 import { fetchDashboardData } from './api';
 
 const PIE_COLORS = ['#0363f9', '#e47759', '#ff8ccf', '#3d9a46', '#bed0ff'];
@@ -2261,83 +2262,119 @@ function App() {
 
         {activeTab === 'surveys' && viewMode === 'table' && (
           <div className="card fade-in">
-            {tableCollections.map((c) => {
-              const { columns, columnValueMap, visibleDocs } = c;
+            {(() => {
+              const hasExportableData = tableCollections.some(c => c.visibleDocs && c.visibleDocs.length > 0);
+
+              const handleExportVisible = () => {
+                const wb = utils.book_new();
+                tableCollections.forEach(c => {
+                  if (!c.visibleDocs || c.visibleDocs.length === 0) return;
+
+                  // Flatten data for export based on current columns
+                  const exportData = c.visibleDocs.map(doc => {
+                    const rowData = {};
+                    const fields = getRowFields(doc);
+                    c.columns.forEach(col => {
+                      // Use the render logic or raw value? 
+                      // Raw value is usually better for Excel, but let's format it nicely if needed.
+                      // For now we use the raw value or a simple string representation
+                      const val = fields[col];
+                      rowData[col] = formatFieldValue(val, { truncate: false });
+                    });
+                    return rowData;
+                  });
+
+                  const ws = utils.json_to_sheet(exportData);
+                  utils.book_append_sheet(wb, ws, c.collection.substring(0, 31)); // sheet name max len 31
+                });
+
+                writeFile(wb, `export_${new Date().toISOString().split('T')[0]}.xlsx`);
+              };
+
               return (
-                <div key={c.collection} style={{ marginBottom: 16 }}>
-                  <div className="coll-header" style={{ marginBottom: 8 }}>
-                    <div className="coll-name">{c.collection} ({visibleDocs.length}{!filterDate && typeof c.count === 'number' ? ` / ${c.count}` : ''})</div>
-                    <div className="coll-actions">
-                      {/* <button className="btn" onClick={handleExportVisible} disabled={!hasExportableData}>
-                        Export visible (.xlsx)
-                      </button> */}
-                    </div>
+                <>
+                  <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'flex-end' }}>
+                    <button className="btn" onClick={handleExportVisible} disabled={!hasExportableData}>
+                      Export
+                    </button>
                   </div>
-                  <div className="table-wrap">
-                    <table>
-                      <thead>
-                        <tr>
-                          {columns.map((col) => {
-                            const formattedCol = col
-                              .replace(/([A-Z])/g, ' $1')
-                              .replace(/^./, str => str.toUpperCase())
-                              .replace(/_/g, ' ')
-                              .trim();
-                            const filterKey = getColumnFilterKey(c.collection, col);
-                            const selectedValue = columnFilters[filterKey] || '__all__';
-                            const availableValues = Array.from(columnValueMap[col] || []);
-                            return (
-                              <th key={col}>
-                                <div className="col-header">
-                                  <span>{formattedCol || 'Field'}</span>
-                                  <select
-                                    value={selectedValue}
-                                    onChange={(e) => handleColumnFilterChange(c.collection, col, e.target.value)}
-                                  >
-                                    <option value="__all__">All answers</option>
-                                    {availableValues.map((val) => (
-                                      <option key={val} value={val}>
-                                        {val}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </div>
-                              </th>
-                            );
-                          })}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {visibleDocs.length === 0 ? (
-                          <tr>
-                            <td colSpan={columns.length || 1} style={{ textAlign: 'center', padding: '24px 0' }}>
-                              No responses match the current filters.
-                            </td>
-                          </tr>
-                        ) : (
-                          visibleDocs.map((doc, idx) => (
-                            <tr key={doc.id || idx}>
-                              {columns.length === 0 ? (
-                                <td>
-                                  <pre>{JSON.stringify(getRowFields(doc), null, 2)}</pre>
-                                </td>
-                              ) : (
-                                columns.map((col) => (
-                                  <td key={col}>
-                                    {renderCellValue(getRowFields(doc)[col])}
+                  {tableCollections.map((c) => {
+                    const { columns, columnValueMap, visibleDocs } = c;
+                    return (
+                      <div key={c.collection} style={{ marginBottom: 16 }}>
+                        <div className="coll-header" style={{ marginBottom: 8 }}>
+                          <div className="coll-name">{c.collection} ({visibleDocs.length}{!filterDate && typeof c.count === 'number' ? ` / ${c.count}` : ''})</div>
+                          <div className="coll-actions">
+                          </div>
+                        </div>
+                        <div className="table-wrap">
+                          <table>
+                            <thead>
+                              <tr>
+                                {columns.map((col) => {
+                                  const formattedCol = col
+                                    .replace(/([A-Z])/g, ' $1')
+                                    .replace(/^./, str => str.toUpperCase())
+                                    .replace(/_/g, ' ')
+                                    .trim();
+                                  const filterKey = getColumnFilterKey(c.collection, col);
+                                  const selectedValue = columnFilters[filterKey] || '__all__';
+                                  const availableValues = Array.from(columnValueMap[col] || []);
+                                  return (
+                                    <th key={col}>
+                                      <div className="col-header">
+                                        <span>{formattedCol || 'Field'}</span>
+                                        <select
+                                          value={selectedValue}
+                                          onChange={(e) => handleColumnFilterChange(c.collection, col, e.target.value)}
+                                        >
+                                          <option value="__all__">All answers</option>
+                                          {availableValues.map((val) => (
+                                            <option key={val} value={val}>
+                                              {val}
+                                            </option>
+                                          ))}
+                                        </select>
+                                      </div>
+                                    </th>
+                                  );
+                                })}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {visibleDocs.length === 0 ? (
+                                <tr>
+                                  <td colSpan={columns.length || 1} style={{ textAlign: 'center', padding: '24px 0' }}>
+                                    No responses match the current filters.
                                   </td>
+                                </tr>
+                              ) : (
+                                visibleDocs.map((doc, idx) => (
+                                  <tr key={doc.id || idx}>
+                                    {columns.length === 0 ? (
+                                      <td>
+                                        <pre>{JSON.stringify(getRowFields(doc), null, 2)}</pre>
+                                      </td>
+                                    ) : (
+                                      columns.map((col) => (
+                                        <td key={col}>
+                                          {renderCellValue(getRowFields(doc)[col])}
+                                        </td>
+                                      ))
+                                    )}
+                                  </tr>
                                 ))
                               )}
-                            </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </>
               );
-            })}
-          </div>
+            })()}
+          </div >
         )}
 
         {activeTab === 'surveys' && viewMode === 'cards' && (
