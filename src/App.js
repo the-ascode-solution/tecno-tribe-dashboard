@@ -500,7 +500,10 @@ function formatFieldValue(value, { truncate = true } = {}) {
   if (Array.isArray(value)) {
     if (value.length === 0) return '[]';
     if (value.length === 1) return formatFieldValue(value[0], { truncate });
-    return `${value.length} items`;
+    const formattedItems = value.map((item) => formatFieldValue(item, { truncate: false }));
+    const joined = formattedItems.join(', ');
+    if (!truncate || joined.length <= 60) return joined;
+    return `${joined.slice(0, 60)}…`;
   }
   if (typeof value === 'object') {
     const keys = Object.keys(value);
