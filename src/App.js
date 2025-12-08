@@ -69,6 +69,10 @@ const HIDDEN_FIELDS = [
   'social media link',
   'follower count',
   'suggestions',
+  'phone feature ranking',
+  'phone feature rating',
+  'phone features rating',
+  'phone features ranking',
 ];
 
 const HIDDEN_FIELD_SET = new Set(HIDDEN_FIELDS.map(normalizeFieldName));
