@@ -3,7 +3,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { utils, writeFile } from 'xlsx';
 import { fetchDashboardData } from './api';
 
-const PIE_COLORS = ['#0363f9', '#e47759', '#ff8ccf', '#3d9a46', '#bed0ff'];
+const PIE_COLORS = ['#0363f9', '#e47759', '#ff8ccf', '#ffe066', '#bed0ff', '#000000'];
+
 const LOCATION_COLOR_OVERRIDES = {
   kpk: '#f4c542',
 };
@@ -1378,11 +1379,30 @@ function App() {
   }, [baseCollections]);
 
   const BUDGET_PIE_MAX = 5;
+  const COLOR_PIE_MAX = 6;
   const budgetPieSlices = useMemo(() => buildPieSlices(budgetStats.rows, budgetStats.total, BUDGET_PIE_MAX), [budgetStats]);
-  const colorPieSlices = useMemo(() => buildPieSlices(colorStats.rows, colorStats.total, BUDGET_PIE_MAX), [colorStats]);
-  const colorSecondaryPieSlices = useMemo(
-    () => buildPieSlices(colorSecondaryStats.rows, colorSecondaryStats.total, BUDGET_PIE_MAX),
+
+  const colorDisplayRows = useMemo(() => colorStats.rows.slice(0, COLOR_PIE_MAX), [colorStats]);
+  const colorDisplayTotal = useMemo(
+    () => colorDisplayRows.reduce((sum, row) => sum + row.count, 0),
+    [colorDisplayRows],
+  );
+  const colorPieSlices = useMemo(
+    () => buildPieSlices(colorDisplayRows, colorDisplayTotal, Infinity),
+    [colorDisplayRows, colorDisplayTotal],
+  );
+
+  const colorSecondaryDisplayRows = useMemo(
+    () => colorSecondaryStats.rows.slice(0, COLOR_PIE_MAX),
     [colorSecondaryStats],
+  );
+  const colorSecondaryDisplayTotal = useMemo(
+    () => colorSecondaryDisplayRows.reduce((sum, row) => sum + row.count, 0),
+    [colorSecondaryDisplayRows],
+  );
+  const colorSecondaryPieSlices = useMemo(
+    () => buildPieSlices(colorSecondaryDisplayRows, colorSecondaryDisplayTotal, Infinity),
+    [colorSecondaryDisplayRows, colorSecondaryDisplayTotal],
   );
   const socialTimePieSlices = useMemo(
     () => buildPieSlices(socialTimeStats.rows, socialTimeStats.total, BUDGET_PIE_MAX),
@@ -1957,7 +1977,7 @@ function App() {
               ) : (
                 <div className="insight-chart" role="img" aria-label="Budget distribution pie chart">
                   <svg viewBox="0 0 120 120" className="insight-pie">
-                    <circle cx="60" cy="60" r="50" fill="#eef4ff" />
+                    <circle cx="60" cy="60" r="50" fill="#ffe066" />
                     {budgetPieSlices.map((slice) => (
                       <path key={slice.label} d={slice.path} fill={slice.color} />
                     ))}
@@ -1983,7 +2003,7 @@ function App() {
               ) : (
                 <div className="insight-chart" role="img" aria-label="Color preference pie chart">
                   <svg viewBox="0 0 120 120" className="insight-pie">
-                    <circle cx="60" cy="60" r="50" fill="#eef4ff" />
+                    <circle cx="60" cy="60" r="50" fill="#ffe066" />
                     {colorPieSlices.map((slice) => (
                       <path key={slice.label} d={slice.path} fill={slice.color} />
                     ))}
@@ -2009,7 +2029,7 @@ function App() {
               ) : (
                 <div className="insight-chart" role="img" aria-label="Secondary color preference pie chart">
                   <svg viewBox="0 0 120 120" className="insight-pie">
-                    <circle cx="60" cy="60" r="50" fill="#eef4ff" />
+                    <circle cx="60" cy="60" r="50" fill="#ffe066" />
                     {colorSecondaryPieSlices.map((slice) => (
                       <path key={slice.label} d={slice.path} fill={slice.color} />
                     ))}
